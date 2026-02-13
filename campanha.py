@@ -67,19 +67,41 @@ def registrar_acao(id_usuario, tipo_acao):
     except Exception as e:
         st.error(f"Erro fatal na gravação: {e}")
             
-# --- BARRA LATERAL (Login) ---
-st.sidebar.title("🔐 Acesso")
-email_input = st.sidebar.text_input("Digite seu ID (E-mail)")
+# --- ÁREA DE LOGIN CENTRALIZADA ---
+if st.session_state["usuario_logado"] is None:
+    st.title("🚀 Comando 2026")
+    st.subheader("Acesse sua conta")
+    
+    with st.container(border=True):
+        email_input = st.text_input("Digite seu ID (E-mail)")
+        if st.button("Entrar", use_container_width=True, type="primary"):
+            df_usuarios = carregar_dados("Usuarios")
+            if df_usuarios is not None:
+                user_match = df_usuarios[df_usuarios['ID_Usuario'].str.lower() == email_input.lower().strip()]
+                if not user_match.empty:
+                    st.session_state["usuario_logado"] = user_match.iloc[0].to_dict()
+                    st.rerun()
+                else:
+                    st.error("❌ ID não encontrado. Verifique se o e-mail está correto.")
+    
+    st.info("💡 Dica: Se for seu primeiro acesso, solicite seu ID ao seu supervisor.")
 
-if st.sidebar.button("Entrar"):
-    df_usuarios = carregar_dados("Usuarios")
-    if df_usuarios is not None:
-        user_match = df_usuarios[df_usuarios['ID_Usuario'].str.lower() == email_input.lower().strip()]
-        if not user_match.empty:
-            st.session_state["usuario_logado"] = user_match.iloc[0].to_dict()
+# --- CONTEÚDO DO APP (APÓS LOGIN) ---
+else:
+    u = st.session_state["usuario_logado"]
+    cargo_limpo = str(u['Cargo']).strip().lower()
+
+    # --- NOVA SIDEBAR (Coloque aqui!) ---
+    with st.sidebar:
+        st.header("👤 Perfil")
+        st.write(f"Olá, **{u['Nome'].split()[0]}**")
+        st.caption(f"Cargo: {u['Cargo']}")
+        st.divider()
+        
+        # Botão Sair dentro da Sidebar
+        if st.button("🚪 Sair / Trocar Conta", use_container_width=True):
+            st.session_state["usuario_logado"] = None
             st.rerun()
-        else:
-            st.sidebar.error("ID não encontrado.")
 
 # --- ÁREA PRINCIPAL ---
 if st.session_state["usuario_logado"]:
@@ -478,11 +500,3 @@ if st.session_state["usuario_logado"]:
                             
                         except Exception as e:
                             st.error(f"Erro ao salvar no Google Sheets: {e}")
-
-                            
-    # --- BOTÃO SAIR ---
-    if st.sidebar.button("Sair"):
-        st.session_state["usuario_logado"] = None
-        st.rerun()
-else:
-    st.info("👋 Por favor, faça login na barra lateral.")
