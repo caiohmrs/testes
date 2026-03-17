@@ -14,7 +14,11 @@ import extra_streamlit_components as stx
 # --- CONFIGURAÇÃO ---
 st.set_page_config(page_title="Comando 2026", layout="centered")
 cookie_manager = stx.CookieManager()
+# --- ESTILIZAÇÃO CUSTOMIZADA (VISUAL MODERNO) ---
 
+# --- LÓGICA DE TEMPO (Coloque antes do perfil do voluntário) ---
+agora = datetime.now()
+tempo_missao = None
 
 
 # --- INICIALIZAÇÃO DO STATE ---
@@ -146,65 +150,128 @@ if st.session_state["usuario_logado"]:
         df_usuarios = carregar_dados("Usuarios")
 
         if df_msgs is None or df_usuarios is None:
-            st.error("Falha ao carregar Mensagens ou Usuarios. Tente novamente.")
+            st.error("Falha ao carregar dados. Tente novamente.")
             st.stop()
         
-        # 1. MENSAGEM DO DIA (Boas-vindas)
+        # --- LÓGICA DE TEMPO DE MISSÃO ---
+        agora = datetime.now()
+        tempo_missao = None
+        cookies = cookie_manager.get_all()
+        checkin_salvo = cookies.get("comando2026_checkin_time")
+
+        if checkin_salvo:
+            try:
+                inicio_dt = datetime.strptime(checkin_salvo, "%Y-%m-%d %H:%M:%S")
+                delta = agora - inicio_dt
+                horas, resto = divmod(delta.seconds, 3600)
+                minutos, _ = divmod(resto, 60)
+                tempo_missao = f"{horas}h {minutos}min"
+                
+                # Card visual do tempo decorrido
+                st.markdown(f"""
+                    <div style="background-color: #e3f2fd; padding: 12px; border-radius: 12px; text-align: center; border: 1px solid #90caf9; margin-bottom: 20px;">
+                        <span style="color: #1565c0; font-weight: bold; font-size: 1.1rem;">⏱️ Em missão há: {tempo_missao}</span>
+                    </div>
+                """, unsafe_allow_html=True)
+            except:
+                pass
+
+        # 1. MENSAGEM DO DIA
         if df_msgs is not None:
             msg_grupo = df_msgs[df_msgs['ID_Alvo'].astype(str) == str(u['ID_Grupo'])]
             if not msg_grupo.empty:
                 m = msg_grupo.iloc[-1]
                 st.info(f"**MENSAGEM DO DIA:**\n\n{m['Mensagem_Inicial']}")
-            else:
-                st.warning(f"Sem instruções específicas para o grupo {u['ID_Grupo']}.")
-        
-        # 2. CHECK-IN (Agora como primeira ação principal)
-        st.divider()
-        if st.button("📍 Marcar Check-in de hoje", use_container_width=True, type="primary"):
-            registrar_acao(u['ID_Usuario'], "Check-in")
-            st.success("Check-in realizado com sucesso!")
 
-        # 3. ÁREA DE MISSÕES (Logo após o Check-in)
+        # 2. ÁREA DE PRESENÇA (Check-in / Check-out com Popover)
+        st.divider()
+        st.subheader("📍 Registro de Presença")
+        
+        col_c1, col_c2 = st.columns(2)
+        
+        with col_c1:
+            with st.popover("🏁 Check-in", use_container_width=True):
+                st.write("### Registrar Entrada")
+                foto_in = st.camera_input("Tire uma foto para o Check-in", key="cam_in")
+                if st.button("Confirmar Check-in", use_container_width=True, type="primary"):
+                    if foto_in:
+                        horario_atual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        registrar_acao(u['ID_Usuario'], f"Check-in (COM FOTO) às {horario_atual}")
+                        cookie_manager.set("comando2026_checkin_time", horario_atual, key="set_checkin_clk")
+                        st.success("Check-in realizado!")
+                        st.rerun()
+                    else:
+                        st.warning("A foto é obrigatória para o registro.")
+
+        with col_c2:
+            with st.popover("🏁 Check-out", use_container_width=True):
+                st.write("### Registrar Saída")
+                if tempo_missao:
+                    st.write(f"⏱️ **Duração da jornada:** {tempo_missao}")
+                
+                foto_out = st.camera_input("Tire uma foto para o Check-out", key="cam_out")
+                if st.button("Confirmar Check-out", use_container_width=True, type="primary"):
+                    if foto_out:
+                        msg_log = f"Check-out (COM FOTO)"
+                        if tempo_missao: msg_log += f" - Duração: {tempo_missao}"
+                        
+                        registrar_acao(u['ID_Usuario'], msg_log)
+                        cookie_manager.delete("comando2026_checkin_time")
+                        st.success("Check-out realizado!")
+                        st.rerun()
+                    else:
+                        st.warning("A foto é obrigatória para o registro.")
+
+        # 3. ÁREA DE MISSÕES
         if df_msgs is not None and not msg_grupo.empty:
-            st.subheader("🚀 Sugestões - Ao fazer algo clique nos botões abaixo")
+            st.divider()
+            st.subheader("🚀 Missões do Grupo")
             
             col_m1, col_m2 = st.columns(2)
             with col_m1:
                 if st.button(f"📲 {m['Sugestao_1']}", use_container_width=True):
                     registrar_acao(u['ID_Usuario'], m['Sugestao_1'])
+                    st.toast("Ação registrada!", icon="✅")
+            
             with col_m2:
                 if st.button(f"💬 {m['Sugestao_2']}", use_container_width=True):
                     registrar_acao(u['ID_Usuario'], m['Sugestao_2'])
+                    st.toast("Ação registrada!", icon="✅")
 
-            tarefa_txt = m['Tarefa_Direcionada'] if str(m['Tarefa_Direcionada']) != "nan" else "Nenhuma tarefa"
+            tarefa_txt = m['Tarefa_Direcionada'] if str(m['Tarefa_Direcionada']) != "nan" else "Tarefa Geral"
             if st.button(f"🚩 {tarefa_txt}", use_container_width=True):
                 registrar_acao(u['ID_Usuario'], f"TAREFA: {tarefa_txt}")
-                st.success(f"Tarefa registrada: {tarefa_txt}")
+                st.toast("Tarefa registrada!", icon="🚩")
 
-        # 4. REDES SOCIAIS (Apenas Instagram)
+        # 4. REDES SOCIAIS E CONTATO
         st.divider()
-        st.subheader("📱 Redes do Max")
+        with st.container():
+            st.subheader("📱 Redes e Suporte")
+            
+            id_sup = str(u['ID_Supervisor']).strip()
+            supervisor_data = df_usuarios[df_usuarios['ID_Usuario'].astype(str).str.strip() == id_sup]
+            if not supervisor_data.empty:
+                sup_nome = supervisor_data.iloc[0]['Nome'].split()[0]
+                whats_sup = sanitize_whatsapp(supervisor_data.iloc[0]['WhatsApp'])
+                st.link_button(f"🆘 Dúvidas? Fale com {sup_nome}", f"https://wa.me/{whats_sup}", use_container_width=True)
 
-        st.markdown("##### 📸 Instagram")
-        
-        insta_html = """
-        <iframe src="https://www.instagram.com/maxmacieldf/embed" 
-            width="100%" height="450" frameborder="0" scrolling="no" allowtransparency="true"
-            style="border-radius: 10px; border: 1px solid #ddd;">
-        </iframe>
-        """
-        st.components.v1.html(insta_html, height=460)
+            st.markdown("---")
+            st.markdown("##### 📸 Instagram @maxmacieldf")
+            insta_html = """
+            <iframe src="https://www.instagram.com/maxmacieldf/embed" 
+                width="100%" height="400" frameborder="0" scrolling="no" allowtransparency="true"
+                style="border-radius: 15px; border: 1px solid #eee;">
+            </iframe>
+            """
+            st.components.v1.html(insta_html, height=410)
 
-        # 5. CONTATO SUPERVISOR (Sidebar)
-        st.sidebar.divider()
-        id_sup = str(u['ID_Supervisor']).strip()
-        supervisor_data = df_usuarios[df_usuarios['ID_Usuario'].astype(str).str.strip() == id_sup]
-        if not supervisor_data.empty:
-            sup_nome = supervisor_data.iloc[0]['Nome'].split()[0]
-            whats_sup = sanitize_whatsapp(supervisor_data.iloc[0]['WhatsApp'])
-            st.sidebar.write(f"Dúvidas? Fale com {sup_nome}:")
-            st.sidebar.markdown(f"[💬 Chamar no WhatsApp](https://wa.me/{whats_sup})")
-    
+        # 5. BOTÃO SAIR
+        st.divider()
+        if st.button("🚪 Sair / Trocar Conta", use_container_width=True, type="secondary"):
+            cookie_manager.delete("comando2026_user_id")
+            cookie_manager.delete("comando2026_checkin_time")
+            st.session_state["usuario_logado"] = None
+            st.rerun()
     
 # --- PERFIL: SUPERVISOR ---
 
