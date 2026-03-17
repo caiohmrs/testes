@@ -9,9 +9,20 @@ except Exception:
     HAS_STREAMLIT_GSHEETS = False
 import gspread
 from google.oauth2.service_account import Credentials
+import extra_streamlit_components as stx
 
 # --- CONFIGURAÇÃO ---
 st.set_page_config(page_title="Comando 2026", layout="centered")
+cookie_manager = stx.CookieManager()
+# --- ESTILIZAÇÃO CUSTOMIZADA (VISUAL MODERNO) ---
+st.markdown("""
+    <style>
+        /* 1. Esconder Header, Menu (Hamburger) e Footer do Streamlit */
+        #MainMenu {visibility: hidden;}
+        header {visibility: hidden;}
+    </style>
+""", unsafe_allow_html=True)
+
 
 # --- INICIALIZAÇÃO DO STATE ---
 if "usuario_logado" not in st.session_state:
