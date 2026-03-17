@@ -1,20 +1,147 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from streamlit_gsheets import GSheetsConnection
+try:
+    from streamlit_gsheets import GSheetsConnection
+    HAS_STREAMLIT_GSHEETS = True
+except Exception:
+    GSheetsConnection = None
+    HAS_STREAMLIT_GSHEETS = False
 import gspread
 from google.oauth2.service_account import Credentials
 
 # --- CONFIGURAÇÃO ---
 st.set_page_config(page_title="Comando 2026", layout="centered")
+# --- ESTILIZAÇÃO CUSTOMIZADA ---
+# --- ESTILIZAÇÃO CUSTOMIZADA (VISUAL MODERNO) ---
+st.markdown("""
+    <style>
+        /* 1. Esconder Header, Menu (Hamburger) e Footer do Streamlit */
+        #MainMenu {visibility: hidden;}
+        header {visibility: hidden;}
+        footer {visibility: hidden;}
+        
+        /* 2. Ajustar margens para compensar a falta do cabeçalho */
+        .block-container {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+            max-width: 500px; /* Estreita o layout para parecer um App Mobile no PC */
+        }
+
+        /* 3. Fundo da página e fontes */
+        .stApp {
+            background-color: #F8F9FA;
+        }
+
+        /* 4. Estilização de Botões (Padrão Max: Laranja) */
+        div.stButton > button:first-child {
+            background-color: #FF5E00; /* Laranja vibrante */
+            color: white;
+            border-radius: 12px;
+            border: none;
+            height: 50px;
+            width: 100%;
+            font-weight: 700;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px rgba(255, 94, 0, 0.2);
+            margin-bottom: 10px;
+        }
+        
+        div.stButton > button:hover {
+            background-color: #E65500;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(255, 94, 0, 0.3);
+            color: white;
+        }
+
+        /* 5. Estilização dos Inputs */
+        .stTextInput > div > div > input {
+            border-radius: 10px;
+            border: 1px solid #E0E0E0;
+            padding: 12px;
+        }
+
+        /* 6. Cards e Containers */
+        [data-testid="stExpander"], [data-testid="stVerticalBlock"] > div > div[data-testid="stVerticalBlock"] {
+            background-color: white;
+            border-radius: 15px;
+            padding: 15px;
+            border: 1px solid #E9ECEF;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+        }
+
+        /* 7. Tabs (Abas) estilo Segmented Control */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 8px;
+            background-color: #E9ECEF;
+            padding: 5px;
+            border-radius: 12px;
+        }
+
+        .stTabs [data-baseweb="tab"] {
+            height: 40px;
+            background-color: transparent;
+            border-radius: 8px;
+            color: #6C757D;
+            border: none;
+        }
+
+        .stTabs [data-baseweb="tab"][aria-selected="true"] {
+            background-color: white;
+            color: #FF5E00;
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        /* 8. Estilo de Alertas/Infos */
+        .stAlert {
+            border-radius: 12px;
+            border: none;
+            background-color: #FFF3E0;
+            color: #E65100;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
 # --- INICIALIZAÇÃO DO STATE ---
 if "usuario_logado" not in st.session_state:
     st.session_state["usuario_logado"] = None
 
+
+def _get_gspread_client():
+    """Cria e retorna um cliente gspread a partir de st.secrets.
+    Retorna None e registra erro no Streamlit se secrets ausentes/invalidos.
+    """
+    try:
+        creds_dict = st.secrets.get("connections", {}).get("gsheets")
+        if not creds_dict:
+            st.error("Credenciais do Google Sheets não encontradas em st.secrets.connections.gsheets")
+            return None
+
+        scope = ["https://www.googleapis.com/auth/spreadsheets"]
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+        client = gspread.authorize(creds)
+        return client
+    except Exception as e:
+        st.error(f"Erro ao criar cliente gspread: {e}")
+        return None
+
+
+def sanitize_whatsapp(v: str) -> str:
+    """Extrai apenas dígitos do número e retorna string vazia se inválido."""
+    if v is None:
+        return ""
+    nums = ''.join(filter(str.isdigit, str(v)))
+    return nums
+
 def carregar_dados(nome_aba):
     try:
-        sheet_id = st.secrets["planilha"]["id"]
+        sheet_id = st.secrets.get("planilha", {}).get("id")
+        if not sheet_id:
+            st.error("ID da planilha não configurado em st.secrets.planilha.id")
+            return None
+
         url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={nome_aba}"
         df = pd.read_csv(url)
         df.columns = df.columns.str.strip()
@@ -26,29 +153,17 @@ def carregar_dados(nome_aba):
 
 def registrar_acao(id_usuario, tipo_acao):
     try:
-        # 1. Configura as credenciais diretamente do st.secrets
-        scope = ["https://www.googleapis.com/auth/spreadsheets"]
-        
-        # Criamos um dicionário de credenciais exatamente como o Google espera
-        creds_dict = {
-            "type": st.secrets["connections"]["gsheets"]["type"],
-            "project_id": st.secrets["connections"]["gsheets"]["project_id"],
-            "private_key_id": st.secrets["connections"]["gsheets"]["private_key_id"],
-            "private_key": st.secrets["connections"]["gsheets"]["private_key"],
-            "client_email": st.secrets["connections"]["gsheets"]["client_email"],
-            "client_id": st.secrets["connections"]["gsheets"]["client_id"],
-            "auth_uri": st.secrets["connections"]["gsheets"]["auth_uri"],
-            "token_uri": st.secrets["connections"]["gsheets"]["token_uri"],
-            "auth_provider_x509_cert_url": st.secrets["connections"]["gsheets"]["auth_provider_x509_cert_url"],
-            "client_x509_cert_url": st.secrets["connections"]["gsheets"]["client_x509_cert_url"],
-        }
-        
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-        client = gspread.authorize(creds)
-        
-        # 2. Abre a planilha pelo ID e a aba pelo nome
-        # Mude o ID abaixo se necessário para garantir que é o atual
-        planilha = client.open_by_key("1ANIjSHO8Wt8BstyDmZu1WbvGj8Xvi8702dsH3sDMGZA")
+        client = _get_gspread_client()
+        if client is None:
+            st.error("Não foi possível obter cliente do Google Sheets. Ação não registrada.")
+            return
+
+        planilha_id = st.secrets.get("planilha", {}).get("id")
+        if not planilha_id:
+            st.error("ID da planilha não configurado em st.secrets.planilha.id")
+            return
+
+        planilha = client.open_by_key(planilha_id)
         aba = planilha.worksheet("Logs")
         
         # 3. Prepara os dados
@@ -61,28 +176,29 @@ def registrar_acao(id_usuario, tipo_acao):
         
         # 4. O comando 'append_row' é o mais poderoso: ele adiciona na última linha livre
         aba.append_row(nova_linha)
-        
-        st.toast(f"✅ Gravado via GSpread: {tipo_acao}")
+        st.toast(f"✅ Gravado: {tipo_acao}")
         
     except Exception as e:
         st.error(f"Erro fatal na gravação: {e}")
             
 # --- ÁREA DE LOGIN CENTRALIZADA ---
 if st.session_state["usuario_logado"] is None:
-    st.title("🚀 Comando 2026")
-    st.subheader("Acesse sua conta")
-    
-    with st.container(border=True):
-        email_input = st.text_input("Digite seu ID (E-mail)")
-        if st.button("Entrar", use_container_width=True, type="primary"):
-            df_usuarios = carregar_dados("Usuarios")
-            if df_usuarios is not None:
-                user_match = df_usuarios[df_usuarios['ID_Usuario'].str.lower() == email_input.lower().strip()]
-                if not user_match.empty:
-                    st.session_state["usuario_logado"] = user_match.iloc[0].to_dict()
-                    st.rerun()
-                else:
-                    st.error("❌ ID não encontrado. Verifique se o e-mail está correto.")
+    col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
+    with col_l2:
+        st.markdown("<h1 style='text-align: center;'>🚀</h1>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center;'>Comando 2026</h2>", unsafe_allow_html=True)
+        
+        with st.container(border=True):
+            email_input = st.text_input("ID de Acesso (E-mail)")
+            if st.button("Entrar no Painel", use_container_width=True, type="primary"):
+                df_usuarios = carregar_dados("Usuarios")
+                if df_usuarios is not None:
+                    user_match = df_usuarios[df_usuarios['ID_Usuario'].str.lower() == email_input.lower().strip()]
+                    if not user_match.empty:
+                        st.session_state["usuario_logado"] = user_match.iloc[0].to_dict()
+                        st.rerun()
+                    else:
+                        st.error("❌ ID não encontrado. Verifique se o e-mail está correto.")
     
     st.info("💡 Dica: Se for seu primeiro acesso, solicite seu ID ao seu supervisor.")
 
@@ -113,9 +229,12 @@ if st.session_state["usuario_logado"]:
 # --- PERFIL: VOLUNTÁRIO ---
     if cargo_limpo in ["voluntario", "voluntário"]:
         st.header(f"Olá, {u['Nome'].split()[0]}! 🚩")
-        
         df_msgs = carregar_dados("Mensagens")
-        df_usuarios = carregar_dados("Usuarios") 
+        df_usuarios = carregar_dados("Usuarios")
+
+        if df_msgs is None or df_usuarios is None:
+            st.error("Falha ao carregar Mensagens ou Usuarios. Tente novamente.")
+            st.stop()
         
         # 1. MENSAGEM DO DIA (Boas-vindas)
         if df_msgs is not None:
@@ -130,20 +249,19 @@ if st.session_state["usuario_logado"]:
         st.divider()
         if st.button("📍 Marcar Check-in de hoje", use_container_width=True, type="primary"):
             registrar_acao(u['ID_Usuario'], "Check-in")
-            st.balloons()
             st.success("Check-in realizado com sucesso!")
 
         # 3. ÁREA DE MISSÕES (Logo após o Check-in)
         if df_msgs is not None and not msg_grupo.empty:
             st.subheader("🚀 Sugestões - Ao fazer algo clique nos botões abaixo")
             
-            if st.button(f"📲 {m['Sugestao_1']}", use_container_width=True):
-                registrar_acao(u['ID_Usuario'], m['Sugestao_1'])
-                st.success(f"Ação registrada: {m['Sugestao_1']}")
-
-            if st.button(f"💬 {m['Sugestao_2']}", use_container_width=True):
-                registrar_acao(u['ID_Usuario'], m['Sugestao_2'])
-                st.success(f"Ação registrada: {m['Sugestao_2']}")
+            col_m1, col_m2 = st.columns(2)
+            with col_m1:
+                if st.button(f"📲 {m['Sugestao_1']}", use_container_width=True):
+                    registrar_acao(u['ID_Usuario'], m['Sugestao_1'])
+            with col_m2:
+                if st.button(f"💬 {m['Sugestao_2']}", use_container_width=True):
+                    registrar_acao(u['ID_Usuario'], m['Sugestao_2'])
 
             tarefa_txt = m['Tarefa_Direcionada'] if str(m['Tarefa_Direcionada']) != "nan" else "Nenhuma tarefa"
             if st.button(f"🚩 {tarefa_txt}", use_container_width=True):
@@ -155,7 +273,6 @@ if st.session_state["usuario_logado"]:
         st.subheader("📱 Redes do Max")
 
         st.markdown("##### 📸 Instagram")
-        st.link_button("Abrir Instagram", "https://www.instagram.com/maxmacieldf", use_container_width=True)
         
         insta_html = """
         <iframe src="https://www.instagram.com/maxmacieldf/embed" 
@@ -171,17 +288,23 @@ if st.session_state["usuario_logado"]:
         supervisor_data = df_usuarios[df_usuarios['ID_Usuario'].astype(str).str.strip() == id_sup]
         if not supervisor_data.empty:
             sup_nome = supervisor_data.iloc[0]['Nome'].split()[0]
-            whats_sup = ''.join(filter(str.isdigit, str(supervisor_data.iloc[0]['WhatsApp'])))
+            whats_sup = sanitize_whatsapp(supervisor_data.iloc[0]['WhatsApp'])
             st.sidebar.write(f"Dúvidas? Fale com {sup_nome}:")
             st.sidebar.markdown(f"[💬 Chamar no WhatsApp](https://wa.me/{whats_sup})")
-    # --- PERFIL: SUPERVISOR ---
+    
+    
+# --- PERFIL: SUPERVISOR ---
+
+
     elif cargo_limpo == "supervisor":
         st.title("📈 Gestão de Equipe")
         with st.spinner('Buscando atividades...'):
             df_usuarios = carregar_dados("Usuarios")
             df_logs = carregar_dados("Logs")
             
-        if df_usuarios is not None and df_logs is not None:
+        if df_usuarios is None or df_logs is None:
+            st.error("Não foi possível carregar dados necessários (Usuarios/Logs).")
+        else:
             minha_equipe = df_usuarios[df_usuarios['ID_Supervisor'].astype(str).str.strip() == str(u['ID_Usuario']).strip()]
             hoje = datetime.now().strftime("%d/%m/%Y")
             
@@ -198,10 +321,10 @@ if st.session_state["usuario_logado"]:
                         else:
                             st.warning("Nenhuma atividade hoje.")
                         
-                        whats_vol = ''.join(filter(str.isdigit, str(vol['WhatsApp'])))
+                        whats_vol = sanitize_whatsapp(vol['WhatsApp'])
                         st.markdown(f"[📲 Cobrar no WhatsApp](https://wa.me/{whats_vol})")
 
-    # --- PERFIL: ADMIN ---
+# --- PERFIL: ADMIN ---
 # --- PERFIL: ADMIN (AQUI ENTRA O NOVO PAINEL) ---
     elif cargo_limpo == "admin":
         st.subheader("🛡️ Gestão Global do Sistema")
@@ -224,7 +347,7 @@ if st.session_state["usuario_logado"]:
                 else:
                     for _, sup in supervisores.iterrows():
                         # Criamos um "Card" usando um container com borda
-                        with st.container(border=True):
+                        with st.container():
                             col_info, col_link = st.columns([3, 1])
                             
                             with col_info:
@@ -248,7 +371,7 @@ if st.session_state["usuario_logado"]:
                                         c1.write(f"🚩 {vol['Nome']}")
                                         c2.write(f"ID: {vol['ID_Usuario']}")
                                         # Link rápido para o voluntário também, se precisar cobrar direto
-                                        w_vol = ''.join(filter(str.isdigit, str(vol['WhatsApp'])))
+                                        w_vol = sanitize_whatsapp(vol['WhatsApp'])
                                         c3.markdown(f"[Contato](https://wa.me/{w_vol})")
                                 else:
                                     st.write("⚠️ Este supervisor ainda não tem voluntários vinculados.")
@@ -259,14 +382,17 @@ if st.session_state["usuario_logado"]:
         with tab_mensagens:
             # Aqui chamamos a lógica de edição que desenvolvemos
             try:
-                # Conexão direta via gspread para evitar cache
-                scope = ["https://www.googleapis.com/auth/spreadsheets"]
-                creds_dict = st.secrets["connections"]["gsheets"]
-                creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-                client = gspread.authorize(creds)
-                planilha = client.open_by_key(st.secrets["planilha"]["id"])
+                client = _get_gspread_client()
+                if client is None:
+                    raise RuntimeError("Cliente gspread indisponível")
+
+                planilha_id = st.secrets.get("planilha", {}).get("id")
+                if not planilha_id:
+                    raise RuntimeError("ID da planilha não configurado em st.secrets.planilha.id")
+
+                planilha = client.open_by_key(planilha_id)
                 aba_msg = planilha.worksheet("Mensagens")
-                
+
                 df_msg = pd.DataFrame(aba_msg.get_all_records())
 
                 lista_alvos = df_msg["ID_Alvo"].unique().tolist()
@@ -290,12 +416,17 @@ if st.session_state["usuario_logado"]:
                     if st.form_submit_button("Salvar Mensagens"):
                         # Lógica de atualização no Google Sheets
                         nova_linha = [f_id, f_msg, f_s1, f_s2, f_tar, f_dat]
-                        
+
                         # Se existe, deleta a linha antiga para não duplicar
                         if alvo_selecionado != "Novo...":
-                            cell = aba_msg.find(str(alvo_selecionado))
-                            aba_msg.delete_rows(cell.row)
-                        
+                            try:
+                                cell = aba_msg.find(str(alvo_selecionado))
+                                if cell:
+                                    aba_msg.delete_rows(cell.row)
+                            except Exception:
+                                # se não encontrou, continuamos e apenas append
+                                pass
+
                         aba_msg.append_row(nova_linha)
                         st.success("Planilha atualizada!")
                         st.cache_data.clear()
@@ -448,55 +579,72 @@ if st.session_state["usuario_logado"]:
         with tab_cadastro:
             st.write("### 👤 Cadastrar Novo Integrante")
             
-            with st.form("form_novo_usuario", clear_on_submit=True):
-                col1, col2 = st.columns(2)
+            # 1. Carregar dados atuais para preencher os selects
+            df_atual = carregar_dados("Usuarios")
+            
+            if df_atual is not None:
+                # Criar listas únicas para os seletores
+                # Pegamos apenas quem já é Supervisor para a lista de supervisores
+                lista_supervisores = df_atual[df_atual['Cargo'].str.lower().str.strip() == "supervisor"]['ID_Usuario'].unique().tolist()
+                lista_grupos = sorted(df_atual['ID_Grupo'].unique().tolist())
                 
-                with col1:
-                    novo_id = st.text_input("ID_Usuario (E-mail):", placeholder="exemplo@email.com").strip().lower()
-                    novo_nome = st.text_input("Nome Completo:", placeholder="João Silva")
-                    novo_whats = st.text_input("WhatsApp (com DDD):", placeholder="61988887777")
-                
-                with col2:
-                    novo_cargo = st.selectbox("Cargo:", ["Voluntario", "Supervisor", "Admin"])
-                    novo_grupo = st.text_input("Grupo (ID):", placeholder="ex: 1")
+                with st.form("form_novo_usuario", clear_on_submit=True):
+                    col1, col2 = st.columns(2)
                     
-                    # O campo supervisor só aparece ou faz sentido se for voluntário
-                    novo_sup = st.text_input("ID_Supervisor (E-mail do Supervisor):", 
-                                            placeholder="chefe@email.com",
-                                            help="Obrigatório para Voluntários")
-
-                enviar_user = st.form_submit_button("Finalizar Cadastro")
-
-                if enviar_user:
-                    if not novo_id or not novo_nome or not novo_whats:
-                        st.error("Preencha os campos obrigatórios: ID, Nome e WhatsApp.")
-                    else:
-                        try:
-                            # Conexão GSpread
-                            scope = ["https://www.googleapis.com/auth/spreadsheets"]
-                            creds_dict = st.secrets["connections"]["gsheets"]
-                            creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-                            client = gspread.authorize(creds)
-                            
-                            planilha = client.open_by_key(st.secrets["planilha"]["id"])
-                            aba_users = planilha.worksheet("Usuarios")
-                            
-                            # Prepara a linha para o Google Sheets (ajuste a ordem conforme sua planilha)
-                            # Ordem sugerida: ID_Usuario, Nome, WhatsApp, Cargo, ID_Grupo, ID_Supervisor
-                            nova_linha_user = [
-                                novo_id, 
-                                novo_nome, 
-                                novo_whats, 
-                                novo_cargo, 
-                                novo_grupo, 
-                                novo_sup if novo_cargo == "Voluntario" else ""
-                            ]
-                            
-                            aba_users.append_row(nova_linha_user)
+                    with col1:
+                        novo_id = st.text_input("ID_Usuario (E-mail):", placeholder="exemplo@email.com").strip().lower()
+                        novo_nome = st.text_input("Nome Completo:", placeholder="João Silva")
+                        novo_whats = st.text_input("WhatsApp (com DDD):", placeholder="61988887777")
+                    
+                    with col2:
+                        novo_cargo = st.selectbox("Cargo:", ["Voluntario", "Supervisor", "Admin"])
                         
-                            st.toast("Usuário salvo com sucesso!", icon="✅")
-                            # Limpa o cache para o novo usuário conseguir logar na hora
-                            st.cache_data.clear()
-                            
-                        except Exception as e:
-                            st.error(f"Erro ao salvar no Google Sheets: {e}")
+                        # Lista de seleção para Grupo
+                        novo_grupo = st.selectbox("Grupo (ID):", options=lista_grupos, help="Selecione um grupo existente")
+                        
+                        # Lista de seleção para Supervisor
+                        novo_sup_selecionado = st.selectbox(
+                            "ID_Supervisor (E-mail do Supervisor):", 
+                            options=["Nenhum"] + lista_supervisores,
+                            help="Obrigatório para Voluntários"
+                        )
+
+                    enviar_user = st.form_submit_button("Finalizar Cadastro")
+
+                    if enviar_user:
+                        if not novo_id or not novo_nome or not novo_whats:
+                            st.error("Preencha os campos obrigatórios: ID, Nome e WhatsApp.")
+                        elif novo_cargo == "Voluntario" and novo_sup_selecionado == "Nenhum":
+                            st.error("⚠️ Voluntários precisam de um supervisor atribuído.")
+                        else:
+                            try:
+                                client = _get_gspread_client()
+                                if client is None:
+                                    raise RuntimeError("Cliente gspread indisponível")
+
+                                planilha_id = st.secrets.get("planilha", {}).get("id")
+                                planilha = client.open_by_key(planilha_id)
+                                aba_users = planilha.worksheet("Usuarios")
+
+                                # Tratamento do valor do supervisor
+                                valor_sup = novo_sup_selecionado if novo_sup_selecionado != "Nenhum" else ""
+
+                                nova_linha_user = [
+                                    novo_id,
+                                    novo_nome,
+                                    novo_whats,
+                                    novo_cargo,
+                                    novo_grupo,
+                                    valor_sup
+                                ]
+
+                                aba_users.append_row(nova_linha_user)
+
+                                st.toast("Usuário salvo com sucesso!", icon="✅")
+                                st.cache_data.clear()
+                                st.rerun()
+
+                            except Exception as e:
+                                st.error(f"Erro ao salvar no Google Sheets: {e}")
+            else:
+                st.error("Erro ao carregar lista de usuários para o cadastro.")
