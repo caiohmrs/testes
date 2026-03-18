@@ -1,49 +1,146 @@
-import streamlit as st
-import pandas as pd
-from datetime import datetime
-try:
-    from streamlit_gsheets import GSheetsConnection
-    HAS_STREAMLIT_GSHEETS = True
-except Exception:
-    GSheetsConnection = None
-    HAS_STREAMLIT_GSHEETS = False
 import gspread
-from google.oauth2.service_account import Credentials
+import io
+from datetime import datetime
+import pandas as pd
+import streamlit as st
 import extra_streamlit_components as stx
 
-# --- CONFIGURAÇÃO ---
-st.set_page_config(page_title="Comando 2026", layout="centered")
-cookie_manager = stx.CookieManager()
-# --- ESTILIZAÇÃO CUSTOMIZADA (VISUAL MODERNO) ---
-
-# --- LÓGICA DE TEMPO (Coloque antes do perfil do voluntário) ---
-agora = datetime.now()
-tempo_missao = None
+# Diferenciando os tipos de credenciais
+from google.oauth2.service_account import Credentials as ServiceAccountCredentials
+from google.oauth2.credentials import Credentials as OAuthCredentials
+from google.auth.transport.requests import Request
+from googleapiclient.http import MediaIoBaseUpload
+from googleapiclient.discovery import build
 
 
-# --- INICIALIZAÇÃO DO STATE ---
-if "usuario_logado" not in st.session_state:
-    st.session_state["usuario_logado"] = None
+
+# --- FUNÇÕES DE APOIO ---
+
+def _get_drive_credentials():
+    """Usa OAuthCredentials (Refresh Token) para os 15GB do Drive"""
+    try:
+        creds_info = st.secrets["google_drive"]
+        creds = OAuthCredentials(
+            token=None,
+            refresh_token=creds_info["refresh_token"],
+            token_uri=creds_info["token_uri"],
+            client_id=creds_info["client_id"],
+            client_secret=creds_info["client_secret"]
+        )
+        
+        if not creds or not creds.valid:
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+        return creds
+    except Exception as e:
+        st.error(f"Erro ao carregar credenciais do Drive: {e}")
+        return None
+
+def _get_sheets_credentials():
+    """Service Account - Para o Sheets (Logs/Usuarios)"""
+    try:
+        creds_dict = st.secrets.get("connections", {}).get("gsheets")
+        scope = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        return ServiceAccountCredentials.from_service_account_info(creds_dict, scopes=scope)
+    except Exception as e:
+        st.error(f"Erro credenciais Sheets: {e}")
+        return None
+
+def salvar_foto_drive(foto_arquivo, nome_arquivo):
+    """Upload via OAuth2 - Usa a cota da conta pessoal (15GB)"""
+    try:
+        from googleapiclient.discovery import build
+        # MUDANÇA AQUI: Usa as credenciais do Drive (OAuth2) e não da Service Account
+        creds = _get_drive_credentials() 
+        
+        if not creds:
+            return "Erro de Autenticação"
+            
+        drive_service = build('drive', 'v3', credentials=creds)
+        id_pasta_fotos = st.secrets["google_drive"]["id_pasta_fotos"]
+
+        file_metadata = {
+            'name': nome_arquivo,
+            'parents': [id_pasta_fotos]
+        }
+        
+        foto_bytes = io.BytesIO(foto_arquivo.getvalue())
+        media = MediaIoBaseUpload(foto_bytes, mimetype='image/jpeg', resumable=False)
+
+        # Upload
+        file = drive_service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id, webViewLink'
+        ).execute()
+
+        # Define permissão para qualquer um com o link ver
+        drive_service.permissions().create(
+            fileId=file.get('id'),
+            body={'type': 'anyone', 'role': 'reader'}
+        ).execute()
+
+        return file.get('webViewLink')
+    except Exception as e:
+        st.error(f"Erro no Drive: {e}")
+        return None
+
+def salvar_documento_drive(doc_arquivo, nome_arquivo):
+    """Upload via OAuth2 para a pasta de Contratos - Usa a cota da conta pessoal"""
+    try:
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaIoBaseUpload
+        import io
+
+        # Usa as mesmas credenciais OAuth2 que já funcionam para fotos
+        creds = _get_drive_credentials() 
+        
+        if not creds:
+            st.error("Erro de Autenticação OAuth2")
+            return None
+            
+        drive_service = build('drive', 'v3', credentials=creds)
+        
+        # MUDANÇA: Buscamos o ID da pasta de contratos no secrets
+        # Certifique-se de adicionar 'id_pasta_contratos' no seu secrets.toml
+        id_pasta_contratos = st.secrets["google_drive"]["id_pasta_contratos"]
+
+        file_metadata = {
+            'name': nome_arquivo,
+            'parents': [id_pasta_contratos]
+        }
+        
+        doc_bytes = io.BytesIO(doc_arquivo.getvalue())
+        
+        # MUDANÇA: Mimetype genérico para aceitar PDFs e outros docs
+        media = MediaIoBaseUpload(doc_bytes, mimetype='application/pdf', resumable=False)
+
+        # Upload
+        file = drive_service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id, webViewLink'
+        ).execute()
+
+        # Define permissão para qualquer um com o link ver (reader)
+        drive_service.permissions().create(
+            fileId=file.get('id'),
+            body={'type': 'anyone', 'role': 'reader'}
+        ).execute()
+
+        return file.get('webViewLink')
+    except Exception as e:
+        st.error(f"Erro no Drive (Documentos): {e}")
+        return None
 
 
 def _get_gspread_client():
-    """Cria e retorna um cliente gspread a partir de st.secrets.
-    Retorna None e registra erro no Streamlit se secrets ausentes/invalidos.
-    """
-    try:
-        creds_dict = st.secrets.get("connections", {}).get("gsheets")
-        if not creds_dict:
-            st.error("Credenciais do Google Sheets não encontradas em st.secrets.connections.gsheets")
-            return None
-
-        scope = ["https://www.googleapis.com/auth/spreadsheets"]
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-        client = gspread.authorize(creds)
-        return client
-    except Exception as e:
-        st.error(f"Erro ao criar cliente gspread: {e}")
-        return None
-
+    """Autoriza o gspread usando a Service Account"""
+    creds = _get_sheets_credentials()
+    return gspread.authorize(creds) if creds else None
 
 def sanitize_whatsapp(v: str) -> str:
     """Extrai apenas dígitos do número e retorna string vazia se inválido."""
@@ -72,32 +169,113 @@ def registrar_acao(id_usuario, tipo_acao):
     try:
         client = _get_gspread_client()
         if client is None:
-            st.error("Não foi possível obter cliente do Google Sheets. Ação não registrada.")
             return
 
-        planilha_id = st.secrets.get("planilha", {}).get("id")
-        if not planilha_id:
-            st.error("ID da planilha não configurado em st.secrets.planilha.id")
-            return
-
+        planilha_id = st.secrets["planilha"]["id"]
         planilha = client.open_by_key(planilha_id)
         aba = planilha.worksheet("Logs")
         
-        # 3. Prepara os dados
-        nova_linha = [
+        # O append_row é o método mais seguro para logs concorrentes
+        aba.append_row([
             datetime.now().strftime("%Y%m%d%H%M%S"),
             str(id_usuario),
             str(tipo_acao),
             datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        ]
+        ])
+        st.toast(f"✅ Log: {tipo_acao}")
+    except Exception as e:
+        st.error(f"Falha ao registrar log: {e}")
+
+def atualizar_contrato_enviado(id_usuario, nome_arquivo, link_drive):
+    """Atualiza o link do contrato assinado na aba Contratos seguindo o padrão gspread"""
+    try:
+        # 1. Usa o mesmo cliente gspread que já funciona nos logs
+        client = _get_gspread_client()
+        if client is None:
+            return False
+
+        # 2. Abre a planilha e acessa a aba correta
+        planilha_id = st.secrets["planilha"]["id"]
+        planilha = client.open_by_key(planilha_id)
+        aba = planilha.worksheet("Contratos")
         
-        # 4. O comando 'append_row' é o mais poderoso: ele adiciona na última linha livre
-        aba.append_row(nova_linha)
-        st.toast(f"✅ Gravado: {tipo_acao}")
+        # 3. Puxa todos os dados para localizar a linha certa
+        # get_all_records transforma a planilha em uma lista de dicionários
+        dados = aba.get_all_records()
+        
+        linha_para_atualizar = None
+        # Começamos na linha 2 porque a 1 é o cabeçalho
+        for i, linha in enumerate(dados, start=2):
+            if str(linha.get('ID_Usuario')) == str(id_usuario) and \
+               str(linha.get('Nome_Arquivo')) == str(nome_arquivo):
+                linha_para_atualizar = i
+                break
+        
+        if linha_para_atualizar:
+            # 4. Localiza em qual coluna está o 'Link_Assinado'
+            cabecalho = aba.row_values(1)
+            if 'Link_Assinado' in cabecalho:
+                coluna_index = cabecalho.index('Link_Assinado') + 1
+                
+                # 5. Faz o update da célula específica (mais rápido que reescrever tudo)
+                aba.update_cell(linha_para_atualizar, coluna_index, link_drive)
+                return True
+            else:
+                st.error("Coluna 'Link_Assinado' não encontrada na aba Contratos.")
+        else:
+            st.error(f"Não encontramos o contrato '{nome_arquivo}' para o usuário {id_usuario}.")
+            
+        return False
         
     except Exception as e:
-        st.error(f"Erro fatal na gravação: {e}")
-            
+        st.error(f"Falha ao atualizar contrato: {e}")
+        return False
+
+
+# --- CONFIGURAÇÃO ---
+st.set_page_config(page_title="Comando 2026", layout="centered")
+
+# Inicializa o gerenciador
+cookie_manager = stx.CookieManager()
+
+# IMPORTANTE: Definir uma variável vazia caso o componente ainda não tenha carregado
+todos_os_cookies = cookie_manager.get_all()
+
+# Se o componente ainda estiver carregando, 'todos_os_cookies' pode vir vazio ou None
+if not todos_os_cookies:
+    # Pequena pausa ou bypass para evitar o NameError enquanto o componente inicializa
+    st.stop() # Ou apenas todos_os_cookies = {}
+
+
+# Recupera o tempo de check-in do cookie para calcular a duração
+checkin_str = todos_os_cookies.get("comando2026_checkin_time")
+if checkin_str:
+    try:
+        checkin_dt = datetime.strptime(checkin_str, "%Y-%m-%d %H:%M:%S")
+        duracao = agora - checkin_dt
+        horas, rem = divmod(duracao.seconds, 3600)
+        minutos, _ = divmod(rem, 60)
+        tempo_missao = f"{duracao.days}d {horas}h {minutos}m"
+    except:
+        tempo_missao = "Erro no cálculo"
+
+# --- INICIALIZAÇÃO DO STATE ---
+if "usuario_logado" not in st.session_state:
+    st.session_state["usuario_logado"] = None
+
+if todos_os_cookies:
+    user_id_cookie = todos_os_cookies.get("comando2026_user_id")
+
+    # Se existe cookie e o usuário NÃO está logado no state ainda
+    if user_id_cookie and st.session_state["usuario_logado"] is None:
+        df_usuarios = carregar_dados("Usuarios")
+        if df_usuarios is not None:
+            user_match = df_usuarios[df_usuarios['ID_Usuario'].str.lower() == user_id_cookie.lower().strip()]
+            if not user_match.empty:
+                st.session_state["usuario_logado"] = user_match.iloc[0].to_dict()
+                st.rerun() # Entra direto no painel
+
+
 # --- ÁREA DE LOGIN CENTRALIZADA ---
 if st.session_state["usuario_logado"] is None:
     col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
@@ -112,7 +290,13 @@ if st.session_state["usuario_logado"] is None:
                 if df_usuarios is not None:
                     user_match = df_usuarios[df_usuarios['ID_Usuario'].str.lower() == email_input.lower().strip()]
                     if not user_match.empty:
+                        # AQUI: Salva no State
                         st.session_state["usuario_logado"] = user_match.iloc[0].to_dict()
+            
+                        # NOVIDADE: Salva o ID no Cookie (expira em 30 dias por padrão)
+                        cookie_manager.set("comando2026_user_id", email_input.lower().strip(), key="set_user_cookie")
+            
+                        st.success("Bem-vindo!")
                         st.rerun()
                     else:
                         st.error("❌ ID não encontrado. Verifique se o e-mail está correto.")
@@ -124,16 +308,27 @@ else:
     u = st.session_state["usuario_logado"]
     cargo_limpo = str(u['Cargo']).strip().lower()
 
-    # --- NOVA SIDEBAR (Coloque aqui!) ---
+# --- NOVA SIDEBAR --
     with st.sidebar:
         st.header("👤 Perfil")
         st.write(f"Olá, **{u['Nome'].split()[0]}**")
         st.caption(f"Cargo: {u['Cargo']}")
         st.divider()
-        
+
+        if st.button("Atualizar Página", use_container_width=True):
+                st.rerun()
+                
         # Botão Sair dentro da Sidebar
-        if st.button("🚪 Sair / Trocar Conta", use_container_width=True):
+        if st.button("Sair", use_container_width=True):
+            # 1. Limpa o Cookie
+            cookie_manager.delete("comando2026_user_id")
+            # Limpa também o check-in se quiser que ele comece do zero
+            cookie_manager.delete("comando2026_checkin_time") 
+    
+            # 2. Limpa o State
             st.session_state["usuario_logado"] = None
+    
+            # 3. Recarrega a página para voltar à tela de login
             st.rerun()
 
 # --- ÁREA PRINCIPAL ---
@@ -145,115 +340,133 @@ if st.session_state["usuario_logado"]:
     
 # --- PERFIL: VOLUNTÁRIO ---
     if cargo_limpo in ["voluntario", "voluntário"]:
-        st.header(f"Olá, {u['Nome'].split()[0]}! 🚩")
-        df_msgs = carregar_dados("Mensagens")
-        df_usuarios = carregar_dados("Usuarios")
+        st.header(f"Olá, {u['Nome'].split()[0]}!")
 
-        if df_msgs is None or df_usuarios is None:
-            st.error("Falha ao carregar dados. Tente novamente.")
-            st.stop()
+        tab_missoes, tab_contratos = st.tabs(["🚀 Missões e Presença", "📄 Meus Contratos"])
+
+        with tab_missoes:
+            df_msgs = carregar_dados("Mensagens")
+            df_usuarios = carregar_dados("Usuarios")
+
+            if df_msgs is None or df_usuarios is None:
+                st.error("Falha ao carregar dados. Tente novamente.")
+                st.stop()
         
-        # --- LÓGICA DE TEMPO DE MISSÃO ---
-        agora = datetime.now()
-        tempo_missao = None
-        cookies = cookie_manager.get_all()
-        checkin_salvo = cookies.get("comando2026_checkin_time")
-
-        if checkin_salvo:
-            try:
-                inicio_dt = datetime.strptime(checkin_salvo, "%Y-%m-%d %H:%M:%S")
-                delta = agora - inicio_dt
-                horas, resto = divmod(delta.seconds, 3600)
-                minutos, _ = divmod(resto, 60)
-                tempo_missao = f"{horas}h {minutos}min"
-                
-                # Card visual do tempo decorrido
-                st.markdown(f"""
-                    <div style="background-color: #e3f2fd; padding: 12px; border-radius: 12px; text-align: center; border: 1px solid #90caf9; margin-bottom: 20px;">
-                        <span style="color: #1565c0; font-weight: bold; font-size: 1.1rem;">⏱️ Em missão há: {tempo_missao}</span>
-                    </div>
-                """, unsafe_allow_html=True)
-            except:
-                pass
 
         # 1. MENSAGEM DO DIA
-        if df_msgs is not None:
-            msg_grupo = df_msgs[df_msgs['ID_Alvo'].astype(str) == str(u['ID_Grupo'])]
-            if not msg_grupo.empty:
-                m = msg_grupo.iloc[-1]
-                st.info(f"**MENSAGEM DO DIA:**\n\n{m['Mensagem_Inicial']}")
+            if df_msgs is not None:
+                msg_grupo = df_msgs[df_msgs['ID_Alvo'].astype(str) == str(u['ID_Grupo'])]
+                if not msg_grupo.empty:
+                    m = msg_grupo.iloc[-1]
+                    st.info(f"**MENSAGEM DO DIA:**\n\n{m['Mensagem_Inicial']}")
 
         # 2. ÁREA DE PRESENÇA (Check-in / Check-out com Popover)
-        st.divider()
-        st.subheader("📍 Registro de Presença")
+            st.divider()
+            st.subheader("Registro de Presença")
         
-        col_c1, col_c2 = st.columns(2)
+            col_c1, col_c2 = st.columns(2)
         
-        with col_c1:
-            with st.popover("🏁 Check-in", use_container_width=True):
-                st.write("### Registrar Entrada")
-                foto_in = st.camera_input("Tire uma foto para o Check-in", key="cam_in")
-                if st.button("Confirmar Check-in", use_container_width=True, type="primary"):
-                    if foto_in:
-                        horario_atual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        registrar_acao(u['ID_Usuario'], f"Check-in (COM FOTO) às {horario_atual}")
-                        cookie_manager.set("comando2026_checkin_time", horario_atual, key="set_checkin_clk")
-                        st.success("Check-in realizado!")
-                        st.rerun()
-                    else:
-                        st.warning("A foto é obrigatória para o registro.")
-
-        with col_c2:
-            with st.popover("🏁 Check-out", use_container_width=True):
-                st.write("### Registrar Saída")
-                if tempo_missao:
-                    st.write(f"⏱️ **Duração da jornada:** {tempo_missao}")
+            with col_c1:
+                with st.popover("🏁 Check-in", use_container_width=True):
+                    st.write("### Registrar Entrada")
+                    foto_in = st.camera_input("Tire uma foto para o Check-in", key="cam_in")
                 
-                foto_out = st.camera_input("Tire uma foto para o Check-out", key="cam_out")
-                if st.button("Confirmar Check-out", use_container_width=True, type="primary"):
-                    if foto_out:
-                        msg_log = f"Check-out (COM FOTO)"
-                        if tempo_missao: msg_log += f" - Duração: {tempo_missao}"
-                        
-                        registrar_acao(u['ID_Usuario'], msg_log)
-                        cookie_manager.delete("comando2026_checkin_time")
-                        st.success("Check-out realizado!")
-                        st.rerun()
-                    else:
-                        st.warning("A foto é obrigatória para o registro.")
+                    if st.button("Confirmar Check-in", use_container_width=True, type="primary"):
+                        if foto_in:
+                            with st.spinner("Enviando foto para o Drive..."):
+                                try:
+                                    nome_img = f"checkin_{u['Nome']}_{datetime.now().strftime('%d/%m/%Y_%H:%M:%S')}.jpg"
+                                    # Tentativa de upload
+                                    link_gerado = salvar_foto_drive(foto_in, nome_img)
+                                
+                                    if link_gerado and "http" in link_gerado:
+                                        horario_atual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                    
+                                        # Registro na planilha: Enviamos o link concatenado para salvar no Sheets,
+                                        # mas o Streamlit continuará tratando como uma ação de "Check-in"
+                                        registrar_acao(u['ID_Usuario'], f"Check-in | Foto: {link_gerado}")
+    
+                                        cookie_manager.set("comando2026_checkin_time", horario_atual, key="set_checkin_clk")
+                                        st.success("Check-in realizado!")
+                                        st.rerun()
+                                    else:
+                                        st.error("Falha ao gerar link do Drive. Verifique as permissões da pasta.")
+                                except Exception as e:
+                                    st.error(f"Erro crítico no upload: {e}")
+                        else:
+                            st.warning("A foto é obrigatória para o registro.")
+
+                with col_c2:
+                    with st.popover("🏁 Check-out", use_container_width=True):
+                        st.write("### Registrar Saída")
+                        foto_out = st.camera_input("Tire uma foto para o Check-out", key="cam_out")
+                
+                        if st.button("Confirmar Check-out", use_container_width=True, type="primary"):
+                            if foto_out:
+                                with st.spinner("Enviando foto..."):
+                                    nome_img = f"checkout_{u['Nome']}_{datetime.now().strftime('%d/%m/%Y_%H:%M:%S')}.jpg"
+                                    link_checkout = salvar_foto_drive(foto_out, nome_img)
+                            
+                                # Montamos a mensagem que vai para a planilha
+                                msg_planilha = f"Check-out | Foto: {link_checkout}"
+                            
+                                # Grava na planilha com o link
+                                registrar_acao(u['ID_Usuario'], msg_planilha)
+        
+                                if "comando2026_checkin_time" in todos_os_cookies:
+                                    cookie_manager.delete("comando2026_checkin_time")
+                            
+                                st.success("Check-out realizado!")
+                                st.rerun()
+                            else:
+                                st.warning("A foto é obrigatória para o registro.")
 
         # 3. ÁREA DE MISSÕES
-        if df_msgs is not None and not msg_grupo.empty:
-            st.divider()
-            st.subheader("🚀 Missões do Grupo")
+            if df_msgs is not None and not msg_grupo.empty:
+                st.divider()
+                st.subheader("Missões do Grupo")
             
-            col_m1, col_m2 = st.columns(2)
+                col_m1, col_m2 = st.columns(2)
+           
+            # --- Botão 1 ---
             with col_m1:
-                if st.button(f"📲 {m['Sugestao_1']}", use_container_width=True):
-                    registrar_acao(u['ID_Usuario'], m['Sugestao_1'])
-                    st.toast("Ação registrada!", icon="✅")
-            
+                    # Mantemos o st.button original para poder disparar o registrar_acao
+                    if st.button(f"📲 {m['Sugestao_1']}", use_container_width=True):
+                        # 1. Registra na planilha
+                        registrar_acao(u['ID_Usuario'], f"Acesso Instagram: {m['Sugestao_1']}")
+        
+                        # 2. Feedback visual rápido
+                        st.toast("Registrando e redirecionando...", icon="📸")
+        
+                        st.markdown(
+                            f'<meta http-equiv="refresh" content="0;URL=\'https://www.instagram.com/maxmacieldf/\'">',
+                            unsafe_allow_html=True
+                        )
+        
+                        # Caso o redirecionamento falhe no navegador do usuário, mostramos o botão fixo:
+                        st.link_button("Clique aqui se não for redirecionado", "https://www.instagram.com/maxmacieldf/")
+            #Botão 2
             with col_m2:
                 if st.button(f"💬 {m['Sugestao_2']}", use_container_width=True):
                     registrar_acao(u['ID_Usuario'], m['Sugestao_2'])
                     st.toast("Ação registrada!", icon="✅")
-
+            #Botão 3
             tarefa_txt = m['Tarefa_Direcionada'] if str(m['Tarefa_Direcionada']) != "nan" else "Tarefa Geral"
             if st.button(f"🚩 {tarefa_txt}", use_container_width=True):
                 registrar_acao(u['ID_Usuario'], f"TAREFA: {tarefa_txt}")
                 st.toast("Tarefa registrada!", icon="🚩")
 
         # 4. REDES SOCIAIS E CONTATO
-        st.divider()
-        with st.container():
-            st.subheader("📱 Redes e Suporte")
+            st.divider()
+            with st.container():
+                st.subheader("📱 Redes e Suporte")
             
-            id_sup = str(u['ID_Supervisor']).strip()
-            supervisor_data = df_usuarios[df_usuarios['ID_Usuario'].astype(str).str.strip() == id_sup]
-            if not supervisor_data.empty:
-                sup_nome = supervisor_data.iloc[0]['Nome'].split()[0]
-                whats_sup = sanitize_whatsapp(supervisor_data.iloc[0]['WhatsApp'])
-                st.link_button(f"🆘 Dúvidas? Fale com {sup_nome}", f"https://wa.me/{whats_sup}", use_container_width=True)
+                id_sup = str(u['ID_Supervisor']).strip()
+                supervisor_data = df_usuarios[df_usuarios['ID_Usuario'].astype(str).str.strip() == id_sup]
+                if not supervisor_data.empty:
+                    sup_nome = supervisor_data.iloc[0]['Nome'].split()[0]
+                    whats_sup = sanitize_whatsapp(supervisor_data.iloc[0]['WhatsApp'])
+                    st.link_button(f"🆘 Dúvidas? Fale com {sup_nome}", f"https://wa.me/{whats_sup}", use_container_width=True)
 
             st.markdown("---")
             st.markdown("##### 📸 Instagram @maxmacieldf")
@@ -265,13 +478,71 @@ if st.session_state["usuario_logado"]:
             """
             st.components.v1.html(insta_html, height=410)
 
-        # 5. BOTÃO SAIR
-        st.divider()
-        if st.button("🚪 Sair / Trocar Conta", use_container_width=True, type="secondary"):
-            cookie_manager.delete("comando2026_user_id")
-            cookie_manager.delete("comando2026_checkin_time")
-            st.session_state["usuario_logado"] = None
-            st.rerun()
+        ###Contratos
+        with tab_contratos:
+            st.subheader("📄 Seus Documentos e Contratos")
+            
+            df_contratos = carregar_dados("Contratos") 
+
+            if df_contratos is not None:
+                meus_docs = df_contratos[df_contratos['ID_Usuario'].astype(str) == str(u['ID_Usuario'])]
+                
+                if not meus_docs.empty:
+                    for _, doc in meus_docs.iterrows():
+                        link_enviado = str(doc.get('Link_Assinado', '')).strip()
+                        esta_pendente = link_enviado == "" or link_enviado.lower() == "nan"
+
+                        col1, col2 = st.columns([3, 1])
+                        with col1:
+                            st.write(f"**Documento:** {doc['Nome_Arquivo']}")
+                            if esta_pendente:
+                                st.warning("⚠️ Aguardando sua assinatura")
+                            else:
+                                st.success("✅ Enviado e em análise")
+                        
+                        with col2:
+                            st.link_button("📥 Baixar", doc['Link_Original'], use_container_width=True)
+                        
+                        if esta_pendente:
+                            with st.expander("⬆️ Clique aqui para enviar o contrato assinado", expanded=True):
+                                arquivo_assinado = st.file_uploader(
+                                    "Faça upload do PDF", 
+                                    type=['pdf'],
+                                    key=f"up_{doc['Nome_Arquivo']}"
+                                )
+                                
+                                if st.button("Confirmar Envio", key=f"btn_{doc['Nome_Arquivo']}", type="primary"):
+                                    if arquivo_assinado:
+                                        with st.spinner("Enviando e atualizando..."):
+                                            nome_final = f"ASSINADO_{u['Nome']}_{doc['Nome_Arquivo']}"
+                                            link_drive = salvar_documento_drive(arquivo_assinado, nome_final)
+                                            
+                                            if link_drive:
+                                                # Chama a função que acabamos de criar
+                                                sucesso = atualizar_contrato_enviado(u['ID_Usuario'], doc['Nome_Arquivo'], link_drive)
+                                                
+                                                # Registra o Log (sua função original que já funciona)
+                                                registrar_acao(u['ID_Usuario'], f"Envio de Contrato: {doc['Nome_Arquivo']}")
+                                                
+                                                if sucesso:
+                                                    st.success("Sistema atualizado com sucesso!")
+                                                    st.cache_data.clear() # Limpa o cache para atualizar a tela
+                                                    st.rerun()
+                                                else:
+                                                    st.error("Documento salvo, mas não conseguimos atualizar a planilha.")
+                                    else:
+                                        st.warning("Selecione o PDF primeiro.")
+                        st.divider()
+                else:
+                    st.info("Nenhum contrato encontrado.")
+            
+            # Opção de Suporte
+            st.write("---")
+            if st.button("Reportar erro em contrato", use_container_width=True):
+                registrar_acao(u['ID_Usuario'], "SOLICITAÇÃO: Erro em contrato")
+                st.warning("Sua solicitação foi enviada ao setor administrativo.")
+
+
     
 # --- PERFIL: SUPERVISOR ---
 
