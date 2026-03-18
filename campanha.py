@@ -319,17 +319,29 @@ else:
                 st.rerun()
                 
         # Botão Sair dentro da Sidebar
-        if st.button("Sair", use_container_width=True):
-            # 1. Limpa o Cookie
-            cookie_manager.delete("comando2026_user_id")
-            # Limpa também o check-in se quiser que ele comece do zero
-            cookie_manager.delete("comando2026_checkin_time") 
-    
-            # 2. Limpa o State
-            st.session_state["usuario_logado"] = None
-    
-            # 3. Recarrega a página para voltar à tela de login
-            st.rerun()
+        if st.sidebar.button("Sair / Trocar Conta", use_container_width=True):
+            try:
+                # 1. Registra o log de saída antes de limpar tudo
+                if 'u' in locals() or 'u' in globals():
+                    registrar_acao(u['ID_Usuario'], "Logout efetuado")
+                
+                # 2. Deleta o cookie com segurança
+                # Verificamos se a chave existe na lista de cookies antes de tentar apagar
+                todos_cookies = cookie_manager.get_all()
+                if "comando2026_user_id" in todos_cookies:
+                    cookie_manager.delete("comando2026_user_id")
+                
+                # 3. Limpa o estado da sessão do Streamlit
+                for key in list(st.session_state.keys()):
+                    del st.session_state[key]
+                    
+                st.success("Saindo...")
+                st.rerun()
+                
+            except Exception as e:
+                # Se der erro no cookie, forçamos a limpeza do session_state de qualquer forma
+                st.session_state.clear()
+                st.rerun()
 
 # --- ÁREA PRINCIPAL ---
 if st.session_state["usuario_logado"]:
@@ -586,7 +598,6 @@ if st.session_state["usuario_logado"]:
                         st.markdown(f"[📲 Cobrar no WhatsApp](https://wa.me/{whats_vol})")
 
 # --- PERFIL: ADMIN ---
-# --- PERFIL: ADMIN (AQUI ENTRA O NOVO PAINEL) ---
     elif cargo_limpo == "admin":
         st.subheader("🛡️ Gestão Global do Sistema")
         
@@ -594,7 +605,7 @@ if st.session_state["usuario_logado"]:
             "👥 Equipes", "📝 Mensagens", "📊 Acompanhamento Geral", "➕ Novo Usuário"
         ])
 
-# --- TABELA DE HIERARQUIA COM CARDS ---
+    # --- TABELA DE HIERARQUIA COM CARDS ---
         with tab_hierarquia:
             st.write("### 👥 Estrutura de Equipes")
             df_usuarios = carregar_dados("Usuarios")
