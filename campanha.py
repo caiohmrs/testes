@@ -320,28 +320,21 @@ else:
                 
         # Botão Sair dentro da Sidebar
         if st.sidebar.button("Sair / Trocar Conta", use_container_width=True):
+            # 1. Limpa IMEDIATAMENTE o session_state (isso mata a interface logada)
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            
+            # 2. Tenta deletar o cookie de forma segura
             try:
-                # 1. Registra o log de saída antes de limpar tudo
-                if 'u' in locals() or 'u' in globals():
-                    registrar_acao(u['ID_Usuario'], "Logout efetuado")
-                
-                # 2. Deleta o cookie com segurança
-                # Verificamos se a chave existe na lista de cookies antes de tentar apagar
-                todos_cookies = cookie_manager.get_all()
-                if "comando2026_user_id" in todos_cookies:
-                    cookie_manager.delete("comando2026_user_id")
-                
-                # 3. Limpa o estado da sessão do Streamlit
-                for key in list(st.session_state.keys()):
-                    del st.session_state[key]
-                    
-                st.success("Saindo...")
-                st.rerun()
-                
-            except Exception as e:
-                # Se der erro no cookie, forçamos a limpeza do session_state de qualquer forma
-                st.session_state.clear()
-                st.rerun()
+                cookie_manager.delete("comando2026_user_id")
+            except:
+                pass # Se o cookie já sumiu, não tem problema
+            
+            # 3. Força o Streamlit a entender que não há mais usuário
+            st.session_state["logado"] = False
+            
+            st.success("Deslogando...")
+            st.rerun()
 
 # --- ÁREA PRINCIPAL ---
 if st.session_state["usuario_logado"]:
