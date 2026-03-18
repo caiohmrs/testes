@@ -444,7 +444,7 @@ if st.session_state["usuario_logado"]:
 
                 # Se o usuário clicou, mostramos o Link Button que abre o APP
                 if st.session_state.get('ready_to_open_insta'):
-                    st.success("✅ Ação registrada!")
+                    st.success("Para ser encaminhado diretamente, clique abaixo!")
                     # instagram://user?username= NOME_DO_USUARIO é o deep link oficial
                     st.link_button(
                         "🚀 ABRIR NO INSTAGRAM", 
