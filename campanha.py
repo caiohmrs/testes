@@ -429,22 +429,32 @@ if st.session_state["usuario_logado"]:
                 col_m1, col_m2 = st.columns(2)
            
             # --- Botão 1 ---
+
             with col_m1:
-                    # Mantemos o st.button original para poder disparar o registrar_acao
-                    if st.button(f"📲 {m['Sugestao_1']}", use_container_width=True):
-                        # 1. Registra na planilha
-                        registrar_acao(u['ID_Usuario'], f"Acesso Instagram: {m['Sugestao_1']}")
-        
-                        # 2. Feedback visual rápido
-                        st.toast("Registrando e redirecionando...", icon="📸")
-        
-                        st.markdown(
-                            f'<meta http-equiv="refresh" content="0;URL=\'https://www.instagram.com/maxmacieldf/\'">',
-                            unsafe_allow_html=True
-                        )
-        
-                        # Caso o redirecionamento falhe no navegador do usuário, mostramos o botão fixo:
-                        st.link_button("Clique aqui se não for redirecionado", "https://www.instagram.com/maxmacieldf/")
+                # Criamos uma chave no session_state para controlar o clique
+                btn_id = f"btn_insta_{u['ID_Usuario']}"
+                
+                if st.button(f"📲 {m['Sugestao_1']}", use_container_width=True, key=btn_id):
+                    # 1. Registra na planilha (Ação silenciosa)
+                    registrar_acao(u['ID_Usuario'], f"Acesso Instagram: {m['Sugestao_1']}")
+                    
+                    # 2. Ativa o modo de redirecionamento no estado da sessão
+                    st.session_state['ready_to_open_insta'] = True
+                    st.rerun()
+
+                # Se o usuário clicou, mostramos o Link Button que abre o APP
+                if st.session_state.get('ready_to_open_insta'):
+                    st.success("✅ Ação registrada!")
+                    # instagram://user?username= NOME_DO_USUARIO é o deep link oficial
+                    st.link_button(
+                        "🚀 ABRIR NO INSTAGRAM", 
+                        "instagram://user?username=maxmacieldf", 
+                        type="primary", 
+                        use_container_width=True
+                    )
+                    
+                    # Fallback caso o celular não tenha o app instalado
+                    st.caption("Se o app não abrir, [clique aqui](https://www.instagram.com/maxmacieldf/)")
             #Botão 2
             with col_m2:
                 if st.button(f"💬 {m['Sugestao_2']}", use_container_width=True):
