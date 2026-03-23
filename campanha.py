@@ -291,11 +291,18 @@ if cargo_limpo in ["voluntario", "voluntário"]:
                             link = salvar_foto_drive(foto_out, nome_img)
                             if link:
                                 registrar_acao(u['ID_Usuario'], f"Check-out | Foto: {link}", localizacao=gps_out)
+                                
+                                # DELETA O COOKIE
                                 cookie_manager.delete("comando2026_checkin_time")
-                                status.update(label="✅ Sucesso!", state="complete")
+                                
+                                status.update(label="✅ Check-out realizado com sucesso!", state="complete")
+                                
+                                # PAUSA DE 2 SEGUNDOS PARA SINCRONIZAR
+                                import time
+                                time.sleep(2)
                                 st.rerun()
-                    else: st.warning("Tire a foto primeiro.")
-
+                    else: 
+                        st.warning("Tire a foto primeiro.")
         # Missões (Botões de sugestão)
         if df_msgs is not None and not msg_grupo.empty:
             st.divider()
@@ -347,7 +354,7 @@ elif cargo_limpo == "supervisor":
 
 
 # --- PERFIL: ADMIN ---
-    elif cargo_limpo == "admin":
+elif cargo_limpo == "admin":
         st.subheader("🛡️ Gestão Global do Sistema")
         
         tab_hierarquia, tab_mensagens, tab_logs, tab_cadastro = st.tabs([
