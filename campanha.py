@@ -5,6 +5,7 @@ import pandas as pd
 import streamlit as st
 import extra_streamlit_components as stx
 from streamlit_js_eval import get_geolocation
+import time
 
 # Diferenciando os tipos de credenciais
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
@@ -205,9 +206,32 @@ with st.sidebar:
     st.header("👤 Perfil")
     st.write(f"Olá, **{u['Nome'].split()[0]}**")
     st.caption(f"Cargo: {u['Cargo']}")
+    
     if st.button("Sair / Trocar Conta", use_container_width=True):
-        cookie_manager.delete("comando2026_user_id")
+        # 1. Tentativa segura de deletar o cookie de login
+        try:
+            # Verificamos se ele existe antes de tentar deletar para evitar o KeyError
+            if "comando2026_user_id" in cookie_manager.get_all():
+                cookie_manager.delete("comando2026_user_id")
+        except Exception:
+            pass # Se falhar na lib, ignoramos e seguimos com a limpeza do state
+
+        # 2. Limpeza adicional (Opcional: limpa o cookie de check-in também ao sair)
+        try:
+            if "comando2026_checkin_time" in cookie_manager.get_all():
+                cookie_manager.delete("comando2026_checkin_time")
+        except Exception:
+            pass
+
+        # 3. Limpa as variáveis de memória do Streamlit
         st.session_state.clear()
+        
+        st.success("Saindo...")
+        
+        # 4. Pausa crucial para o navegador processar a deleção dos cookies
+        time.sleep(3)
+        
+        # 5. Recarrega para a tela de login
         st.rerun()
 
 # --- PAINEL PRINCIPAL ---
@@ -288,7 +312,6 @@ if cargo_limpo in ["voluntario", "voluntário"]:
                                 status.update(label="✅ Check-in realizado com sucesso!", state="complete")
                                 
                                 # Pausa para sincronização e visualização
-                                import time
                                 time.sleep(3)
                                 st.rerun()
                     else: 
@@ -309,11 +332,9 @@ if cargo_limpo in ["voluntario", "voluntário"]:
                                 
                                 # --- DELEÇÃO SEGURA DO COOKIE ---
                                 try:
-                                    # Só tenta deletar se ele realmente existir nos cookies carregados
                                     if "comando2026_checkin_time" in cookie_manager.get_all():
                                         cookie_manager.delete("comando2026_checkin_time")
                                 except Exception as e:
-                                    # Se der erro aqui, ignoramos para não travar o app
                                     pass
                                 
                                 status.update(label="✅ Check-out realizado com sucesso!", state="complete")
