@@ -165,18 +165,7 @@ st.markdown(f"""
             color: #E20613 !important;
         }}
 
-        /* --- LIMPEZA DE INTERFACE --- */
-        .stDeployButton, #MainMenu, div[data-testid="stDecoration"], footer {{
-            display: none !important;
-            visibility: hidden !important;
-        }}
-
-        /* Header Transparente para manter o botão da Sidebar */
-        header[data-testid="stHeader"] {{
-            background-color: rgba(0,0,0,0) !important;
-            color: #1D1D1B !important;
-        }}
-
+    
         /* Ajuste do conteúdo superior */
         .block-container {{
             padding-top: 2rem !important;
