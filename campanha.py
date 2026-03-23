@@ -4,7 +4,7 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 import extra_streamlit_components as stx
-from streamlit_js_eval import streamlit_js_eval
+from streamlit_js_eval import get_geolocation
 
 # Diferenciando os tipos de credenciais
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
@@ -217,25 +217,34 @@ st.title(f"Painel: {u['Cargo']}")
 # --- VISÃO: VOLUNTÁRIO ---
 if cargo_limpo in ["voluntario", "voluntário"]:
     
-    # 1. CAPTURA DE GPS AUTOMÁTICA (Sem botão invisível)
-    # Este código roda um JavaScript no navegador para pegar a posição
     st.markdown("### 📍 Localização")
     
-    # Tentativa de captura
-    loc_data = streamlit_js_eval(
-        js_expressions='navigator.geolocation.getCurrentPosition(pos => { window.parent.postMessage({type: "streamlit:setComponentValue", value: pos.coords.latitude + "," + pos.coords.longitude}, "*"); }, err => { console.log(err); });', 
-        key='get_gps_coords'
-    )
+    # 1. TENTA CAPTURAR AUTOMATICAMENTE
+    # Isso abre o pedido de permissão do navegador
+    location_data = get_geolocation()
 
     with st.container(border=True):
-        if loc_data and "," in str(loc_data):
-            st.success(f"✅ Localização capturada!")
-            st.session_state['last_coords'] = loc_data
+        if location_data:
+            # Se o componente respondeu, extraímos as coordenadas
+            try:
+                lat = location_data['coords']['latitude']
+                lon = location_data['coords']['longitude']
+                coords_str = f"{lat},{lon}"
+                
+                st.success(f"✅ GPS Ativo")
+                st.session_state['last_coords'] = coords_str
+            except:
+                st.error("❌ GPS bloqueado ou erro de permissão.")
+                st.session_state['last_coords'] = "Erro na captura"
         else:
-            st.warning("📡 Aguardando sinal de GPS... Por favor, autorize o acesso à localização no seu navegador.")
-            if st.button("🔄 Tentar Capturar Novamente"):
+            # Enquanto o usuário não permite ou o GPS não responde
+            st.warning("📡 Aguardando GPS...")
+            st.info("💡 **Dica:** Verifique se o GPS do celular está ligado e se você autorizou o navegador a usar sua localização.")
+            
+            if st.button("🔄 Atualizar Sinal"):
                 st.rerun()
-            st.session_state['last_coords'] = "GPS Não Capturado"
+            
+            st.session_state['last_coords'] = "Aguardando GPS"
 
     tab_missoes, tab_contratos = st.tabs(["🚀 Missões e Presença", "📄 Meus Contratos"])
 
