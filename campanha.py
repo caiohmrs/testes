@@ -16,38 +16,47 @@ from googleapiclient.discovery import build
 
 # --- CONFIGURAÇÃO INICIAL ---
 
-# --- ESTILIZAÇÃO VISUAL "COMANDO 2026" ATUALIZADA (MOBILE FRIENDLY) ---
+# --- ESTILIZAÇÃO VISUAL "COMANDO 2026" ---
 st.markdown(f"""
     <style>
+        /* Importando fonte robusta */
         @import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Roboto:wght@400;700&display=swap');
 
-        /* 1. RESET E AJUSTES GLOBAIS */
+        /* 1. CORREÇÃO DE CENTRALIZAÇÃO GLOBAL */
+        [data-testid="stVerticalBlock"] > div {{
+            display: flex;
+            justify-content: center;
+            width: 100%;
+        }}
+
+        /* Fundo principal do App */
         .stApp {{
             background-color: #FFFFFF;
             color: #1D1D1B;
             font-family: 'Roboto', sans-serif;
         }}
 
-        /* Centralização total para Mobile */
-        [data-testid="stVerticalBlock"] > div {{
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            width: 100%;
+        /* Sidebar com fundo Amarelo */
+        section[data-testid="stSidebar"] {{
+            background-color: #FFEB00 !important;
+            border-right: 5px solid #1D1D1B;
+        }}
+        
+        section[data-testid="stSidebar"] .stMarkdown, section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2 {{
+            color: #1D1D1B !important;
         }}
 
-        /* 2. TÍTULOS E TEXTOS */
+        /* Títulos com estilo Impacto/Slanted */
         h1, h2, h3 {{
             font-family: 'Archivo Black', sans-serif !important;
             text-transform: uppercase;
             font-style: italic;
             color: #1D1D1B;
+            letter-spacing: -1px;
             text-align: center;
-            line-height: 1.1;
-            margin-bottom: 10px !important;
         }}
 
-        /* 3. BOTÕES (MISSÕES E GERAIS) */
+        /* Botão Primário (Vermelho como nas artes) */
         .stButton > button {{
             background-color: #E20613 !important;
             color: white !important;
@@ -55,63 +64,90 @@ st.markdown(f"""
             border: 3px solid #1D1D1B !important;
             border-radius: 0px !important;
             text-transform: uppercase;
-            box-shadow: 4px 4px 0px #1D1D1B !important;
-            width: 100% !important;
-            min-height: 3.5rem;
-            margin-bottom: 10px;
+            transition: 0.3s;
+            box-shadow: 4px 4px 0px #1D1D1B;
+            text-align: center;
+            width: 100%;
         }}
 
-        /* 4. POPOVER (CHECK-IN / CHECK-OUT) - FORÇANDO VISIBILIDADE */
+        .stButton > button:hover {{
+            background-color: #FFEB00 !important;
+            color: #1D1D1B !important;
+            transform: translate(-2px, -2px);
+            box-shadow: 6px 6px 0px #1D1D1B;
+        }}
+
+        /* Tabs (Abas) estilizadas */
+        div[data-baseweb="tab-list"] {{
+            gap: 10px;
+            background-color: transparent;
+            justify-content: center;
+        }}
+
+        div[data-baseweb="tab"] {{
+            background-color: #FFEB00 !important;
+            border: 2px solid #1D1D1B !important;
+            border-radius: 0px !important;
+            font-weight: bold !important;
+            color: #1D1D1B !important;
+            padding: 10px 20px !important;
+        }}
+
+        div[data-baseweb="tab-highlight"] {{
+            background-color: #E20613 !important;
+        }}
+
+        /* Estilização de Containers/Cards (Informações do dia) */
+        div[data-testid="stExpander"], div[data-testid="stVerticalBlock"] > div[style*="border"] {{
+            border: 3px solid #1D1D1B !important;
+            border-radius: 0px !important;
+            background-color: #F4F4F4 !important;
+            box-shadow: 6px 6px 0px #FFEB00 !important;
+        }}
+
+        /* Input de texto */
+        .stTextInput input {{
+            border: 2px solid #1D1D1B !important;
+            border-radius: 0px !important;
+            text-align: center;
+        }}
+
+        /* Ajuste de métricas */
+        [data-testid="stMetricValue"] {{
+            font-family: 'Archivo Black', sans-serif !important;
+            color: #E20613 !important;
+        }}
+        
+        /* Popover (Check-in/Out) - IGUAL AOS BOTÕES DE MISSÃO */
         div[data-testid="stPopover"] {{
-            width: 100% !important;
+            width: 100%;
+            display: flex;
+            justify-content: center;
         }}
 
         div[data-testid="stPopover"] > button {{
             background-color: #E20613 !important;
-            color: #FFFFFF !important;
+            color: white !important;
             font-family: 'Archivo Black', sans-serif !important;
             border: 3px solid #1D1D1B !important;
             border-radius: 0px !important;
             text-transform: uppercase;
             font-style: italic;
             box-shadow: 4px 4px 0px #1D1D1B !important;
+            transition: 0.3s;
             width: 100% !important;
-            min-height: 3.5rem !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
+            height: 3em;
+            margin: 0 auto; /* Centraliza */
         }}
 
-        /* 5. TABS (ABAS DE NAVEGAÇÃO) */
-        div[data-baseweb="tab-list"] {{
-            gap: 5px;
-            justify-content: center;
-        }}
-        div[data-baseweb="tab"] {{
+        /* Efeito de passar o mouse no Popover */
+        div[data-testid="stPopover"] > button:hover {{
             background-color: #FFEB00 !important;
-            border: 2px solid #1D1D1B !important;
             color: #1D1D1B !important;
-            font-family: 'Archivo Black', sans-serif !important;
-            font-size: 0.8rem !important;
-            padding: 8px !important;
+            transform: translate(-2px, -2px);
+            box-shadow: 6px 6px 0px #1D1D1B !important;
         }}
 
-        /* 6. CAIXA DE MENSAGEM DO DIA */
-        .msg-container {{
-            background-color: #FFEB00;
-            padding: 15px;
-            border: 4px solid #1D1D1B;
-            box-shadow: 8px 8px 0px #1D1D1B;
-            text-align: center;
-            width: 90%;
-            margin: 10px auto;
-        }}
-
-        /* Sidebar */
-        section[data-testid="stSidebar"] {{
-            background-color: #FFEB00 !important;
-            border-right: 5px solid #1D1D1B;
-        }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -411,13 +447,13 @@ if cargo_limpo in ["voluntario", "voluntário"]:
             if not msg_grupo.empty:
                 m = msg_grupo.iloc[-1]
                 with st.container():
-                    st.markdown(f"""
-                        <div class="msg-container">
-                            <h2 style='margin:0; font-size: 1.5rem;'>MENSAGEM DO DIA</h2>
-                            <hr style='border: 1px solid #1D1D1B;'>
-                            <p style='font-size: 1.1rem; font-weight: bold; margin: 0;'>{m['Mensagem_Inicial']}</p>
+                    st.markdown("""
+                        <div style='background-color: #FFEB00; padding: 20px; border: 3px solid #1D1D1B;'>
+                            <h2 style='margin:0;'>MENSAGEM DO DIA</h2>
+                            <p style='font-size: 1.2rem; font-weight: bold;'>{}</p>
                         </div>
-                    """, unsafe_allow_html=True)
+                    """.format(m['Mensagem_Inicial']), unsafe_allow_html=True)
+
         # Presença
         st.divider()
         st.subheader("Registro de Presença")
