@@ -9,4 +9,4 @@ google-auth-httplib2
 google-auth-oauthlib
 gspread
 oauth2client
-streamlit_geolocation
+streamlit_js_eval
