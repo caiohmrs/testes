@@ -16,38 +16,33 @@ from googleapiclient.discovery import build
 
 # --- CONFIGURAÇÃO INICIAL ---
 
-# --- ESTILIZAÇÃO VISUAL "ANTI-DARKMODE" COMANDO 2026 ---
+# --- ESTILIZAÇÃO VISUAL UNIFICADA "COMANDO 2026" ---
 st.markdown(f"""
     <style>
-        /* 1. FORÇA O NAVEGADOR A TRATAR O SITE COMO LIGHT MODE */
-        :root {{
-            color-scheme: light !important;
-        }}
-
         /* Importando fontes */
         @import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Roboto:wght@400;700&display=swap');
 
-        /* 2. TRAVA O FUNDO E TEXTO GLOBAL (IMPEDE INVERSÃO DO DARK MODE) */
-        .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {{
-            background-color: #FFFFFF !important;
-            color: #1D1D1B !important;
-            font-family: 'Roboto', sans-serif;
-        }}
-
-        /* Centralização Global */
+        /* 1. CENTRALIZAÇÃO GLOBAL */
         [data-testid="stVerticalBlock"] > div {{
             display: flex;
             justify-content: center;
             width: 100%;
         }}
 
-        /* Sidebar Amarela (Sempre Amarela) */
-        section[data-testid="stSidebar"], [data-testid="stSidebarContent"] {{
+        /* Fundo principal do App */
+        .stApp {{
+            background-color: #FFFFFF;
+            color: #1D1D1B;
+            font-family: 'Roboto', sans-serif;
+        }}
+
+        /* Sidebar Amarela */
+        section[data-testid="stSidebar"] {{
             background-color: #FFEB00 !important;
-            border-right: 5px solid #1D1D1B !important;
+            border-right: 5px solid #1D1D1B;
         }}
         
-        section[data-testid="stSidebar"] *, section[data-testid="stSidebar"] p, section[data-testid="stSidebar"] h1 {{
+        section[data-testid="stSidebar"] .stMarkdown, section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2 {{
             color: #1D1D1B !important;
         }}
 
@@ -56,86 +51,97 @@ st.markdown(f"""
             font-family: 'Archivo Black', sans-serif !important;
             text-transform: uppercase;
             font-style: italic;
-            color: #1D1D1B !important;
+            color: #1D1D1B;
             letter-spacing: -1px;
             text-align: center;
         }}
 
-        /* 3. BOTÕES UNIFICADOS (BLINDADOS CONTRA DARK MODE) */
+        /* 2. PADRONIZAÇÃO TOTAL DE BOTÕES (COMUM + POPOVER) */
         .stButton > button, 
         div[data-testid="stPopover"] > button {{
-            background-color: #E20613 !important; /* Sempre Vermelho */
-            color: #FFFFFF !important;           /* Sempre Branco */
+            background-color: #E20613 !important; /* Vermelho */
+            color: #FFFFFF !important;           /* Texto Branco */
             font-family: 'Archivo Black', sans-serif !important;
-            border: 3px solid #1D1D1B !important;
-            border-radius: 0px !important;
+            border: 3px solid #1D1D1B !important; /* Borda Preta Grossa */
+            border-radius: 0px !important;        /* Pontas Quadradas */
             text-transform: uppercase !important;
             font-style: italic !important;
-            box-shadow: 4px 4px 0px #1D1D1B !important;
+            box-shadow: 4px 4px 0px #1D1D1B !important; /* Sombra Sólida */
             width: 100% !important;
             min-height: 3.5rem !important;
+            transition: 0.2s !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            opacity: 1 !important;
         }}
 
-        /* Hover/Click (Sempre Amarelo) */
+        /* EFEITO AO CLICAR OU PASSAR O MOUSE (HOVER) */
         .stButton > button:hover, 
         .stButton > button:active,
         .stButton > button:focus,
         div[data-testid="stPopover"] > button:hover,
         div[data-testid="stPopover"] > button:active,
         div[data-testid="stPopover"] > button:focus {{
-            background-color: #FFEB00 !important;
-            color: #1D1D1B !important;
+            background-color: #FFEB00 !important; /* Fica Amarelo */
+            color: #1D1D1B !important;           /* Texto Preto */
+            transform: translate(-2px, -2px) !important;
             box-shadow: 6px 6px 0px #1D1D1B !important;
             border: 3px solid #1D1D1B !important;
-            transform: translate(-2px, -2px) !important;
         }}
 
-        /* Ajuste de ícones e textos dentro do Popover */
-        div[data-testid="stPopover"] p, div[data-testid="stPopover"] span {{
+        /* Ajuste para ícones/emojis dentro dos botões de popover */
+        div[data-testid="stPopover"] p {{
             color: inherit !important;
             font-family: 'Archivo Black', sans-serif !important;
+            font-weight: bold !important;
+            margin: 0 !important;
         }}
 
-        /* 4. OUTROS ELEMENTOS (FORÇANDO CORES ORIGINAIS) */
+        /* 3. OUTROS COMPONENTES */
         
         /* Abas (Tabs) */
         div[data-baseweb="tab-list"] {{
-            background-color: transparent !important;
-            justify-content: center !important;
+            gap: 10px;
+            background-color: transparent;
+            justify-content: center;
         }}
+
         div[data-baseweb="tab"] {{
             background-color: #FFEB00 !important;
             border: 2px solid #1D1D1B !important;
-            color: #1D1D1B !important;
             border-radius: 0px !important;
+            font-weight: bold !important;
+            color: #1D1D1B !important;
+            padding: 10px 20px !important;
         }}
 
-        /* Expanders / Cards */
+        div[data-baseweb="tab-highlight"] {{
+            background-color: #E20613 !important;
+        }}
+
+        /* Cards e Expanders */
         div[data-testid="stExpander"], div[data-testid="stVerticalBlock"] > div[style*="border"] {{
             border: 3px solid #1D1D1B !important;
+            border-radius: 0px !important;
             background-color: #F4F4F4 !important;
             box-shadow: 6px 6px 0px #FFEB00 !important;
-            color: #1D1D1B !important;
         }}
 
-        /* Inputs de Texto (Força fundo branco para não sumir no dark mode) */
+        /* Inputs de Texto */
         .stTextInput input {{
-            background-color: #FFFFFF !important;
-            color: #1D1D1B !important;
             border: 2px solid #1D1D1B !important;
             border-radius: 0px !important;
-            text-align: center !important;
+            text-align: center;
+        }}
+
+        /* Métricas */
+        [data-testid="stMetricValue"] {{
+            font-family: 'Archivo Black', sans-serif !important;
+            color: #E20613 !important;
         }}
 
     </style>
 """, unsafe_allow_html=True)
-
-# 5. META TAG ADICIONAL (Informa ao navegador que o site é LIGHT)
-st.markdown('<meta name="color-scheme" content="light">', unsafe_allow_html=True)
 #agora
 
 agora = datetime.now()
