@@ -22,6 +22,13 @@ st.markdown(f"""
         /* Importando fonte robusta */
         @import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Roboto:wght@400;700&display=swap');
 
+        /* 1. CORREÇÃO DE CENTRALIZAÇÃO GLOBAL */
+        [data-testid="stVerticalBlock"] > div {{
+            display: flex;
+            justify-content: center;
+            width: 100%;
+        }}
+
         /* Fundo principal do App */
         .stApp {{
             background-color: #FFFFFF;
@@ -46,6 +53,7 @@ st.markdown(f"""
             font-style: italic;
             color: #1D1D1B;
             letter-spacing: -1px;
+            text-align: center;
         }}
 
         /* Botão Primário (Vermelho como nas artes) */
@@ -54,11 +62,12 @@ st.markdown(f"""
             color: white !important;
             font-family: 'Archivo Black', sans-serif !important;
             border: 3px solid #1D1D1B !important;
-            border-radius: 0px !important; /* Estilo mais bruto/reto */
+            border-radius: 0px !important;
             text-transform: uppercase;
             transition: 0.3s;
             box-shadow: 4px 4px 0px #1D1D1B;
             text-align: center;
+            width: 100%;
         }}
 
         .stButton > button:hover {{
@@ -72,6 +81,7 @@ st.markdown(f"""
         div[data-baseweb="tab-list"] {{
             gap: 10px;
             background-color: transparent;
+            justify-content: center;
         }}
 
         div[data-baseweb="tab"] {{
@@ -108,16 +118,38 @@ st.markdown(f"""
             color: #E20613 !important;
         }}
         
-        /* Popover (Check-in/Out) */
-        div[data-testid="stPopover"] > button {{
-            background-color: #1D1D1B !important;
-            color: #FFEB00 !important;
-            border-radius: 0px !important;
-            font-weight: bold;
+        /* Popover (Check-in/Out) - IGUAL AOS BOTÕES DE MISSÃO */
+        div[data-testid="stPopover"] {{
+            width: 100%;
+            display: flex;
+            justify-content: center;
         }}
+
+        div[data-testid="stPopover"] > button {{
+            background-color: #E20613 !important;
+            color: white !important;
+            font-family: 'Archivo Black', sans-serif !important;
+            border: 3px solid #1D1D1B !important;
+            border-radius: 0px !important;
+            text-transform: uppercase;
+            font-style: italic;
+            box-shadow: 4px 4px 0px #1D1D1B !important;
+            transition: 0.3s;
+            width: 100% !important;
+            height: 3em;
+            margin: 0 auto; /* Centraliza */
+        }}
+
+        /* Efeito de passar o mouse no Popover */
+        div[data-testid="stPopover"] > button:hover {{
+            background-color: #FFEB00 !important;
+            color: #1D1D1B !important;
+            transform: translate(-2px, -2px);
+            box-shadow: 6px 6px 0px #1D1D1B !important;
+        }}
+
     </style>
 """, unsafe_allow_html=True)
-
 
 #agora
 
@@ -401,6 +433,8 @@ if cargo_limpo in ["voluntario", "voluntário"]:
         if st.button("🔄", help="Atualizar GPS"):
             st.rerun()
 
+    st.divider() # Uma linha fina para separar do resto
+
     tab_missoes, tab_contratos = st.tabs(["🚀 Missões e Presença", "📄 Meus Contratos"])
 
     with tab_missoes:
@@ -426,61 +460,70 @@ if cargo_limpo in ["voluntario", "voluntário"]:
         c1, c2 = st.columns(2)
         
         with c1:
-            with st.popover("🏁 Check-in", use_container_width=True):
-                foto_in = st.camera_input("Foto para Check-in", key="cam_in")
-                if st.button("Confirmar Check-in", use_container_width=True, type="primary"):
+            # Popover estilizado para Check-in
+            with st.popover("🏁 ENTRADA (CHECK-IN)", use_container_width=True):
+                st.markdown("""
+                    <div style='background-color: #FFEB00; padding: 10px; border: 2px solid #1D1D1B; text-align: center; margin-bottom: 15px;'>
+                        <h3 style='margin:0; font-size: 1.2rem; font-style: italic;'>REGISTRAR INÍCIO</h3>
+                    </div>
+                """, unsafe_allow_html=True)
+                
+                foto_in = st.camera_input("FOTO OBRIGATÓRIA", key="cam_in")
+                
+                if st.button("CONFIRMAR CHECK-IN", use_container_width=True, type="primary"):
                     if foto_in:
                         gps_in = st.session_state.get('last_coords', "Sem GPS")
-                        with st.status("Processando Check-in...", expanded=True) as status:
+                        with st.status("🚀 PROCESSANDO...", expanded=True) as status:
                             nome_img = f"checkin_{u['Nome']}_{agora.strftime('%d-%m-%Y_%H-%M')}.jpg"
                             link = salvar_foto_drive(foto_in, nome_img)
                             
                             if link:
                                 registrar_acao(u['ID_Usuario'], f"Check-in | Foto: {link}", localizacao=gps_in)
                                 
-                                # --- DEFINIÇÃO SEGURA DO COOKIE ---
                                 try:
                                     horario_formatado = agora.strftime("%Y-%m-%d %H:%M:%S")
                                     cookie_manager.set("comando2026_checkin_time", horario_formatado)
-                                except Exception as e:
-                                    # Falha silenciosa para não impedir o usuário de prosseguir
+                                except Exception:
                                     pass
                                 
-                                status.update(label="✅ Check-in realizado com sucesso!", state="complete")
-                                
-                                # Pausa para sincronização e visualização
+                                status.update(label="✅ REGISTRO CONCLUÍDO!", state="complete")
                                 time.sleep(3)
                                 st.rerun()
                     else: 
-                        st.warning("Tire a foto primeiro.")
+                        st.error("⚠️ A FOTO É OBRIGATÓRIA!")
 
         with c2:
-            with st.popover("🏁 Check-out", use_container_width=True):
-                foto_out = st.camera_input("Foto para Check-out", key="cam_out")
-                if st.button("Confirmar Check-out", use_container_width=True, type="primary"):
+            # Popover estilizado para Check-out
+            with st.popover("🏁 SAÍDA (CHECK-OUT)", use_container_width=True):
+                st.markdown("""
+                    <div style='background-color: #FFEB00; padding: 10px; border: 2px solid #1D1D1B; text-align: center; margin-bottom: 15px;'>
+                        <h3 style='margin:0; font-size: 1.2rem; font-style: italic;'>REGISTRAR TÉRMINO</h3>
+                    </div>
+                """, unsafe_allow_html=True)
+                
+                foto_out = st.camera_input("FOTO OBRIGATÓRIA", key="cam_out")
+                
+                if st.button("CONFIRMAR CHECK-OUT", use_container_width=True, type="primary"):
                     if foto_out:
                         gps_out = st.session_state.get('last_coords', "Sem GPS")
-                        with st.status("Finalizando...", expanded=True) as status:
+                        with st.status("📡 FINALIZANDO...", expanded=True) as status:
                             nome_img = f"checkout_{u['Nome']}_{agora.strftime('%d-%m-%Y_%H-%M')}.jpg"
                             link = salvar_foto_drive(foto_out, nome_img)
                             
                             if link:
                                 registrar_acao(u['ID_Usuario'], f"Check-out | Foto: {link}", localizacao=gps_out)
                                 
-                                # --- DELEÇÃO SEGURA DO COOKIE ---
                                 try:
                                     if "comando2026_checkin_time" in cookie_manager.get_all():
                                         cookie_manager.delete("comando2026_checkin_time")
-                                except Exception as e:
+                                except Exception:
                                     pass
                                 
-                                status.update(label="✅ Check-out realizado com sucesso!", state="complete")
-                                
-                                import time
-                                time.sleep(3) # Pausa curta para o usuário ver a mensagem
+                                status.update(label="✅ MISSÃO FINALIZADA!", state="complete")
+                                time.sleep(3)
                                 st.rerun()
                     else: 
-                        st.warning("Tire a foto primeiro.")
+                        st.error("⚠️ A FOTO É OBRIGATÓRIA!")
         # Missões (Botões de sugestão)
         if df_msgs is not None and not msg_grupo.empty:
             st.divider()
