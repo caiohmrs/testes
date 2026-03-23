@@ -15,7 +15,7 @@ from googleapiclient.http import MediaIoBaseUpload
 from googleapiclient.discovery import build
 
 # --- CONFIGURAÇÃO INICIAL ---
-st.markdown("<h1 style='font-size: 3rem;'>COMANDO 2026</h1>", unsafe_allow_html=True)
+
 # --- ESTILIZAÇÃO VISUAL "COMANDO 2026" ---
 st.markdown(f"""
     <style>
@@ -58,6 +58,7 @@ st.markdown(f"""
             text-transform: uppercase;
             transition: 0.3s;
             box-shadow: 4px 4px 0px #1D1D1B;
+            text-align: center;
         }}
 
         .stButton > button:hover {{
@@ -98,6 +99,7 @@ st.markdown(f"""
         .stTextInput input {{
             border: 2px solid #1D1D1B !important;
             border-radius: 0px !important;
+            text-align: center;
         }}
 
         /* Ajuste de métricas */
@@ -277,21 +279,55 @@ if st.session_state["usuario_logado"] is None:
     # Reseta o sinal de logout para permitir novo login
     st.session_state["logout_em_andamento"] = False
     
+    # Criamos um espaço no topo para centralizar verticalmente
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    
     col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
+    
     with col_l2:
-        st.markdown("<h1 style='text-align: center;'>🚀</h1><h2 style='text-align: center;'>Comando 2026</h2>", unsafe_allow_html=True)
-        with st.container(border=True):
-            email_input = st.text_input("ID de Acesso (E-mail)")
-            if st.button("Entrar no Painel", use_container_width=True, type="primary"):
-                df_usuarios = carregar_dados("Usuarios")
-                if df_usuarios is not None:
-                    user_match = df_usuarios[df_usuarios['ID_Usuario'].str.lower() == email_input.lower().strip()]
-                    if not user_match.empty:
-                        st.session_state["usuario_logado"] = user_match.iloc[0].to_dict()
-                        cookie_manager.set("comando2026_user_id", email_input.lower().strip(), key="set_user_cookie")
-                        st.rerun()
-                    else:
-                        st.error("❌ ID não encontrado.")
+        # TÍTULO ESTILIZADO (Igual às artes)
+        st.markdown("""
+            <h1 style='text-align: center; font-size: 4rem; line-height: 0.9; margin-bottom: 20px;'>
+                Max Maciel<br><span style='color: #E20613;'>🧢 2026</span;>
+            </h1>
+        """, unsafe_allow_html=True)
+        
+# CONTAINER DE LOGIN (Estilo Card Amarelo Centralizado)
+        with st.container():
+            st.markdown("""
+                <div style='background-color: #FFEB00; padding: 15px; border: 4px solid #1D1D1B; box-shadow: 10px 10px 0px #1D1D1B; text-align: center;'>
+                    <h2 style='margin-top: 0; font-size: 1.5rem; font-family: "Archivo Black", sans-serif; font-style: italic; text-transform: uppercase; color: #1D1D1B;'>
+                        Faça seu login abaixo:
+                    </h2>
+                </div>
+            """, unsafe_allow_html=True)
+            st.divider()
+            # Espaço entre o título e o input
+            st.markdown("<div style='margin-top: -20px;'></div>", unsafe_allow_html=True)
+            
+            # O input e o botão herdarão o estilo centralizado se estiverem dentro de colunas ou se o CSS global permitir
+            # Mas para garantir o visual dentro da caixa, costumamos usar este truque de CSS:
+            email_input = st.text_input("ID DE USUÁRIO (E-MAIL)", placeholder="seu@email.com", label_visibility="collapsed")
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            if st.button("ENTRAR NO PAINEL", use_container_width=True, type="primary"):
+                with st.spinner("VALIDANDO..."):
+                    df_usuarios = carregar_dados("Usuarios")
+                    if df_usuarios is not None:
+                        user_match = df_usuarios[df_usuarios['ID_Usuario'].str.lower() == email_input.lower().strip()]
+                        if not user_match.empty:
+                            st.session_state["usuario_logado"] = user_match.iloc[0].to_dict()
+                            cookie_manager.set("comando2026_user_id", email_input.lower().strip(), key="set_user_cookie")
+                            st.rerun()
+                        else:
+                            st.error("❌ ID NÃO ENCONTRADO")
+            
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.info("💡 Primeiro acesso? Solicite seu ID ao seu supervisor.")
+
     st.stop()
 
 # --- VARIÁVEIS DO USUÁRIO (SÓ APÓS LOGIN) ---
