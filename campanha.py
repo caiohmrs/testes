@@ -138,6 +138,28 @@ st.markdown(f"""
         [data-testid="stMetricValue"] {{
             font-family: 'Archivo Black', sans-serif !important;
             color: #E20613 !important;
+
+
+        /* 1. OCULTAR O BOTÃO DE DEPLOY E O MENU HAMBÚRGUER */
+        header[data-testid="stHeader"] {{
+            visibility: hidden;
+            height: 0%;
+        }}
+
+        /* 2. OCULTAR A LINHA COLORIDA NO TOPO (DECORATION) */
+        div[data-testid="stDecoration"] {{
+            display: none;
+        }}
+
+        /* 3. OCULTAR O RODAPÉ "MADE WITH STREAMLIT" */
+        footer {{
+            visibility: hidden;
+        }}
+
+        /* 4. AJUSTE DE MARGEM PARA COMPENSAR A BARRA SUMIDA */
+        .block-container {{
+            padding-top: 1rem !important;
+        }}
         }}
 
     </style>
