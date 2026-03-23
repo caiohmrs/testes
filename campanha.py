@@ -289,17 +289,23 @@ if cargo_limpo in ["voluntario", "voluntário"]:
                         with st.status("Finalizando...", expanded=True) as status:
                             nome_img = f"checkout_{u['Nome']}_{agora.strftime('%d-%m-%Y_%H-%M')}.jpg"
                             link = salvar_foto_drive(foto_out, nome_img)
+                            
                             if link:
                                 registrar_acao(u['ID_Usuario'], f"Check-out | Foto: {link}", localizacao=gps_out)
                                 
-                                # DELETA O COOKIE
-                                cookie_manager.delete("comando2026_checkin_time")
+                                # --- DELEÇÃO SEGURA DO COOKIE ---
+                                try:
+                                    # Só tenta deletar se ele realmente existir nos cookies carregados
+                                    if "comando2026_checkin_time" in cookie_manager.get_all():
+                                        cookie_manager.delete("comando2026_checkin_time")
+                                except Exception as e:
+                                    # Se der erro aqui, ignoramos para não travar o app
+                                    pass
                                 
                                 status.update(label="✅ Check-out realizado com sucesso!", state="complete")
                                 
-                                # PAUSA DE 2 SEGUNDOS PARA SINCRONIZAR
                                 import time
-                                time.sleep(2)
+                                time.sleep(1.5) # Pausa curta para o usuário ver a mensagem
                                 st.rerun()
                     else: 
                         st.warning("Tire a foto primeiro.")
