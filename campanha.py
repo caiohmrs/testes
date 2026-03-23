@@ -176,15 +176,16 @@ def modal_checkin(u, agora):
     
     if st.button("CONFIRMAR CHECK-IN AGORA", use_container_width=True, type="primary"):
         if foto_in:
+            agora_real = datetime.now()
             gps_in = st.session_state.get('last_coords', "Sem GPS")
             with st.status("🚀 PROCESSANDO REGISTRO...", expanded=True) as status:
-                nome_img = f"checkin_{u['Nome']}_{agora.strftime('%d-%m-%Y_%H-%M')}.jpg"
+                nome_img = f"checkin_{u['Nome']}_{agora_real.strftime('%d-%m-%Y_%H-%M')}.jpg"
                 link = salvar_foto_drive(foto_in, nome_img)
                 
                 if link:
                     registrar_acao(u['ID_Usuario'], f"Check-in | Foto: {link}", localizacao=gps_in)
                     try:
-                        horario_formatado = agora.strftime("%Y-%m-%d %H:%M:%S")
+                        horario_formatado = agora_real.strftime("%Y-%m-%d %H:%M:%S")
                         cookie_manager.set("comando2026_checkin_time", horario_formatado)
                     except Exception:
                         pass
@@ -207,9 +208,10 @@ def modal_checkout(u, agora):
     
     if st.button("CONFIRMAR SAÍDA AGORA", use_container_width=True, type="primary"):
         if foto_out:
+            agora_real = datetime.now()
             gps_out = st.session_state.get('last_coords', "Sem GPS")
             with st.status("📡 PROCESSANDO SAÍDA...", expanded=True) as status:
-                nome_img = f"checkout_{u['Nome']}_{agora.strftime('%d-%m-%Y_%H-%M')}.jpg"
+                nome_img = f"checkout_{u['Nome']}_{agora_real.strftime('%d-%m-%Y_%H-%M')}.jpg"
                 link = salvar_foto_drive(foto_out, nome_img)
                 
                 if link:
@@ -371,9 +373,6 @@ def sanitize_whatsapp(v: str) -> str:
 cookie_manager = stx.CookieManager()
 todos_os_cookies = cookie_manager.get_all()
 
-if not todos_os_cookies:
-    st.stop()
-
 # --- ESTADO DE LOGIN ---
 if "usuario_logado" not in st.session_state:
     st.session_state["usuario_logado"] = None
@@ -411,7 +410,7 @@ if st.session_state["usuario_logado"] is None:
         # TÍTULO ESTILIZADO (Igual às artes)
         st.markdown("""
             <h1 style='text-align: center; font-size: 4rem; line-height: 0.9; margin-bottom: 20px;'>
-                Max Maciel<br><span style='color: #E20613;'>🧢 2026</span;>
+                Max Maciel<br><span style='color: #E20613;'>🧢 2026</span>
             </h1>
         """, unsafe_allow_html=True)
         
@@ -540,6 +539,7 @@ if cargo_limpo in ["voluntario", "voluntário"]:
     
     # 1. Carregar dados das mensagens
     df_msgs = carregar_dados("Mensagens")
+    msg_grupo = pd.DataFrame()
     if df_msgs is not None:
         msg_grupo = df_msgs[df_msgs['ID_Alvo'].astype(str) == str(u['ID_Grupo'])]
         
@@ -576,9 +576,6 @@ if cargo_limpo in ["voluntario", "voluntário"]:
     tab_missoes, tab_contratos = st.tabs(["🚀 Missões e Presença", "📄 Meus Contratos"])
 
     with tab_missoes:
-        df_msgs = carregar_dados("Mensagens")
-        df_usuarios = carregar_dados("Usuarios")
-        
         # Presença  
         st.divider()
         st.markdown("""
