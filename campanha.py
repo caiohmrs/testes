@@ -270,15 +270,29 @@ if cargo_limpo in ["voluntario", "voluntário"]:
                 if st.button("Confirmar Check-in", use_container_width=True, type="primary"):
                     if foto_in:
                         gps_in = st.session_state.get('last_coords', "Sem GPS")
-                        with st.status("Processando...", expanded=True) as status:
+                        with st.status("Processando Check-in...", expanded=True) as status:
                             nome_img = f"checkin_{u['Nome']}_{agora.strftime('%d-%m-%Y_%H-%M')}.jpg"
                             link = salvar_foto_drive(foto_in, nome_img)
+                            
                             if link:
                                 registrar_acao(u['ID_Usuario'], f"Check-in | Foto: {link}", localizacao=gps_in)
-                                cookie_manager.set("comando2026_checkin_time", agora.strftime("%Y-%m-%d %H:%M:%S"))
-                                status.update(label="✅ Sucesso!", state="complete")
+                                
+                                # --- DEFINIÇÃO SEGURA DO COOKIE ---
+                                try:
+                                    horario_formatado = agora.strftime("%Y-%m-%d %H:%M:%S")
+                                    cookie_manager.set("comando2026_checkin_time", horario_formatado)
+                                except Exception as e:
+                                    # Falha silenciosa para não impedir o usuário de prosseguir
+                                    pass
+                                
+                                status.update(label="✅ Check-in realizado com sucesso!", state="complete")
+                                
+                                # Pausa para sincronização e visualização
+                                import time
+                                time.sleep(3)
                                 st.rerun()
-                    else: st.warning("Tire a foto primeiro.")
+                    else: 
+                        st.warning("Tire a foto primeiro.")
 
         with c2:
             with st.popover("🏁 Check-out", use_container_width=True):
@@ -305,7 +319,7 @@ if cargo_limpo in ["voluntario", "voluntário"]:
                                 status.update(label="✅ Check-out realizado com sucesso!", state="complete")
                                 
                                 import time
-                                time.sleep(1.5) # Pausa curta para o usuário ver a mensagem
+                                time.sleep(3) # Pausa curta para o usuário ver a mensagem
                                 st.rerun()
                     else: 
                         st.warning("Tire a foto primeiro.")
