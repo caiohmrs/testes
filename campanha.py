@@ -519,7 +519,7 @@ st.markdown(f"""
         </h3>
         <h1 style='
             margin: 0; 
-            font-size: 2.6rem; /* Reduzi um pouco para nomes longos caberem */
+            font-size: 2.2rem; /* Reduzi um pouco para nomes longos caberem */
             font-family: "Archivo Black", sans-serif; 
             font-style: italic; 
             text-transform: uppercase; 
