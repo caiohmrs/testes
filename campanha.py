@@ -4,6 +4,8 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 import extra_streamlit_components as stx
+from streamlit_js_eval import streamlit_js_eval
+
 
 # Diferenciando os tipos de credenciais
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
@@ -13,6 +15,29 @@ from googleapiclient.http import MediaIoBaseUpload
 from googleapiclient.discovery import build
 
 
+# --- CAPTURA DE LOCALIZAÇÃO ---
+# Isso solicita permissão de GPS ao usuário assim que ele entra na tela
+loc = streamlit_js_eval(js_expressions='navigator.geolocation.getCurrentPosition(pos => { window.parent.postMessage({type: "streamlit:setComponentValue", value: pos.coords.latitude + "," + pos.coords.longitude}, "*"); }, err => { console.log(err); });', key='get_loc')
+        
+coordenadas = loc if loc else "GPS Desativado/Pendente"
+
+
+#CSS Visual
+
+st.markdown("""
+    <style>
+        .stButton button { width: 100%; border-radius: 10px; height: 3em; }
+        .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+        .stTabs [data-baseweb="tab"] { 
+            background-color: #f0f2f6; 
+            border-radius: 10px 10px 0px 0px; 
+            padding: 10px;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+
+agora = datetime.now()
 
 # --- FUNÇÕES DE APOIO ---
 
@@ -149,23 +174,17 @@ def sanitize_whatsapp(v: str) -> str:
     nums = ''.join(filter(str.isdigit, str(v)))
     return nums
 
+@st.cache_data(ttl=60) # Cache curto para logs e mensagens
 def carregar_dados(nome_aba):
     try:
-        sheet_id = st.secrets.get("planilha", {}).get("id")
-        if not sheet_id:
-            st.error("ID da planilha não configurado em st.secrets.planilha.id")
-            return None
-
+        sheet_id = st.secrets["planilha"]["id"]
         url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={nome_aba}"
         df = pd.read_csv(url)
-        df.columns = df.columns.str.strip()
-        df = df.astype(str).apply(lambda x: x.str.strip())
-        return df
+        return df.astype(str).apply(lambda x: x.str.strip())
     except Exception as e:
-        st.error(f"Erro ao carregar dados: {e}")
         return None
 
-def registrar_acao(id_usuario, tipo_acao):
+def registrar_acao(id_usuario, tipo_acao, localizacao="Não informada"):
     try:
         client = _get_gspread_client()
         if client is None:
@@ -180,7 +199,8 @@ def registrar_acao(id_usuario, tipo_acao):
             datetime.now().strftime("%Y%m%d%H%M%S"),
             str(id_usuario),
             str(tipo_acao),
-            datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+            str(localizacao)
         ])
         st.toast(f"✅ Log: {tipo_acao}")
     except Exception as e:
@@ -365,67 +385,74 @@ if st.session_state["usuario_logado"]:
                     m = msg_grupo.iloc[-1]
                     st.info(f"**MENSAGEM DO DIA:**\n\n{m['Mensagem_Inicial']}")
 
-        # 2. ÁREA DE PRESENÇA (Check-in / Check-out com Popover)
+# 2. ÁREA DE PRESENÇA (Check-in / Check-out com Popover)
             st.divider()
             st.subheader("Registro de Presença")
         
             col_c1, col_c2 = st.columns(2)
+            agora_atual = datetime.now() # Garantindo que temos o tempo atual definido
         
             with col_c1:
                 with st.popover("🏁 Check-in", use_container_width=True):
                     st.write("### Registrar Entrada")
-                    foto_in = st.camera_input("Tire uma foto para o Check-in", key="cam_in")
+                    
+                    # Feedback visual do GPS
+                    if loc:
+                        st.success(f"📍 Localização detectada")
+                    else:
+                        st.warning("⚠️ Aguardando GPS... Certifique-se de que a localização está ativa.")
+
+                    foto_in = st.camera_input("Tire uma foto", key="cam_in")
                 
                     if st.button("Confirmar Check-in", use_container_width=True, type="primary"):
                         if foto_in:
-                            with st.spinner("Enviando foto para o Drive..."):
-                                try:
-                                    nome_img = f"checkin_{u['Nome']}_{datetime.now().strftime('%d/%m/%Y_%H:%M:%S')}.jpg"
-                                    # Tentativa de upload
+                            try:
+                                with st.status("Processando...", expanded=True) as status:
+                                    nome_img = f"checkin_{u['Nome']}_{datetime.now().strftime('%d-%m-%Y_%H-%M')}.jpg"
                                     link_gerado = salvar_foto_drive(foto_in, nome_img)
-                                
-                                    if link_gerado and "http" in link_gerado:
-                                        horario_atual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                                     
-                                        # Registro na planilha: Enviamos o link concatenado para salvar no Sheets,
-                                        # mas o Streamlit continuará tratando como uma ação de "Check-in"
-                                        registrar_acao(u['ID_Usuario'], f"Check-in | Foto: {link_gerado}")
-    
-                                        cookie_manager.set("comando2026_checkin_time", horario_atual, key="set_checkin_clk")
-                                        st.success("Check-in realizado!")
+                                    if link_gerado:
+                                        # Passamos as coordenadas capturadas para a função de log
+                                        registrar_acao(u['ID_Usuario'], f"Check-in | Foto: {link_gerado}", localizacao=coordenadas)
+                                        
+                                        cookie_manager.set("comando2026_checkin_time", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                                        status.update(label="✅ Check-in realizado!", state="complete", expanded=False)
                                         st.rerun()
-                                    else:
-                                        st.error("Falha ao gerar link do Drive. Verifique as permissões da pasta.")
-                                except Exception as e:
-                                    st.error(f"Erro crítico no upload: {e}")
+                            except Exception as e:
+                                st.error(f"Erro: {e}")
                         else:
-                            st.warning("A foto é obrigatória para o registro.")
+                            st.warning("A foto é obrigatória.")
 
-                with col_c2:
-                    with st.popover("🏁 Check-out", use_container_width=True):
-                        st.write("### Registrar Saída")
-                        foto_out = st.camera_input("Tire uma foto para o Check-out", key="cam_out")
-                
-                        if st.button("Confirmar Check-out", use_container_width=True, type="primary"):
-                            if foto_out:
-                                with st.spinner("Enviando foto..."):
-                                    nome_img = f"checkout_{u['Nome']}_{datetime.now().strftime('%d/%m/%Y_%H:%M:%S')}.jpg"
+            with col_c2:
+                with st.popover("🏁 Check-out", use_container_width=True):
+                    st.write("### Registrar Saída")
+                    
+                    if loc:
+                        st.success(f"📍 Localização detectada")
+                    
+                    foto_out = st.camera_input("Tire uma foto para o Check-out", key="cam_out")
+            
+                    if st.button("Confirmar Check-out", use_container_width=True, type="primary"):
+                        if foto_out:
+                            try:
+                                with st.status("Finalizando...", expanded=True) as status:
+                                    nome_img = f"checkout_{u['Nome']}_{datetime.now().strftime('%d-%m-%Y_%H-%M')}.jpg"
                                     link_checkout = salvar_foto_drive(foto_out, nome_img)
-                            
-                                # Montamos a mensagem que vai para a planilha
-                                msg_planilha = f"Check-out | Foto: {link_checkout}"
-                            
-                                # Grava na planilha com o link
-                                registrar_acao(u['ID_Usuario'], msg_planilha)
-        
-                                if "comando2026_checkin_time" in todos_os_cookies:
-                                    cookie_manager.delete("comando2026_checkin_time")
-                            
-                                st.success("Check-out realizado!")
-                                st.rerun()
-                            else:
-                                st.warning("A foto é obrigatória para o registro.")
-
+                                    
+                                    if link_checkout:
+                                        # Registro com localização
+                                        registrar_acao(u['ID_Usuario'], f"Check-out | Foto: {link_checkout}", localizacao=coordenadas)
+                
+                                        if "comando2026_checkin_time" in todos_os_cookies:
+                                            cookie_manager.delete("comando2026_checkin_time")
+                                    
+                                        status.update(label="✅ Check-out realizado!", state="complete", expanded=False)
+                                        st.rerun()
+                            except Exception as e:
+                                st.error(f"Erro: {e}")
+                        else:
+                            st.warning("A foto é obrigatória.")
+                        
         # 3. ÁREA DE MISSÕES
             if df_msgs is not None and not msg_grupo.empty:
                 st.divider()
