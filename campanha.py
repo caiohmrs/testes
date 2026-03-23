@@ -16,13 +16,13 @@ from googleapiclient.discovery import build
 
 # --- CONFIGURAÇÃO INICIAL ---
 
-# --- ESTILIZAÇÃO VISUAL "COMANDO 2026" ---
+# --- ESTILIZAÇÃO VISUAL UNIFICADA "COMANDO 2026" ---
 st.markdown(f"""
     <style>
-        /* Importando fonte robusta */
+        /* Importando fontes */
         @import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Roboto:wght@400;700&display=swap');
 
-        /* 1. CORREÇÃO DE CENTRALIZAÇÃO GLOBAL */
+        /* 1. CENTRALIZAÇÃO GLOBAL */
         [data-testid="stVerticalBlock"] > div {{
             display: flex;
             justify-content: center;
@@ -36,7 +36,7 @@ st.markdown(f"""
             font-family: 'Roboto', sans-serif;
         }}
 
-        /* Sidebar com fundo Amarelo */
+        /* Sidebar Amarela */
         section[data-testid="stSidebar"] {{
             background-color: #FFEB00 !important;
             border-right: 5px solid #1D1D1B;
@@ -46,7 +46,7 @@ st.markdown(f"""
             color: #1D1D1B !important;
         }}
 
-        /* Títulos com estilo Impacto/Slanted */
+        /* Títulos Estilo Cartaz */
         h1, h2, h3 {{
             font-family: 'Archivo Black', sans-serif !important;
             text-transform: uppercase;
@@ -56,28 +56,50 @@ st.markdown(f"""
             text-align: center;
         }}
 
-        /* Botão Primário (Vermelho como nas artes) */
-        .stButton > button {{
-            background-color: #E20613 !important;
-            color: white !important;
+        /* 2. PADRONIZAÇÃO TOTAL DE BOTÕES (COMUM + POPOVER) */
+        .stButton > button, 
+        div[data-testid="stPopover"] > button {{
+            background-color: #E20613 !important; /* Vermelho */
+            color: #FFFFFF !important;           /* Texto Branco */
             font-family: 'Archivo Black', sans-serif !important;
+            border: 3px solid #1D1D1B !important; /* Borda Preta Grossa */
+            border-radius: 0px !important;        /* Pontas Quadradas */
+            text-transform: uppercase !important;
+            font-style: italic !important;
+            box-shadow: 4px 4px 0px #1D1D1B !important; /* Sombra Sólida */
+            width: 100% !important;
+            min-height: 3.5rem !important;
+            transition: 0.2s !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }}
+
+        /* EFEITO AO CLICAR OU PASSAR O MOUSE (HOVER) */
+        .stButton > button:hover, 
+        .stButton > button:active,
+        .stButton > button:focus,
+        div[data-testid="stPopover"] > button:hover,
+        div[data-testid="stPopover"] > button:active,
+        div[data-testid="stPopover"] > button:focus {{
+            background-color: #FFEB00 !important; /* Fica Amarelo */
+            color: #1D1D1B !important;           /* Texto Preto */
+            transform: translate(-2px, -2px) !important;
+            box-shadow: 6px 6px 0px #1D1D1B !important;
             border: 3px solid #1D1D1B !important;
-            border-radius: 0px !important;
-            text-transform: uppercase;
-            transition: 0.3s;
-            box-shadow: 4px 4px 0px #1D1D1B;
-            text-align: center;
-            width: 100%;
         }}
 
-        .stButton > button:hover {{
-            background-color: #FFEB00 !important;
-            color: #1D1D1B !important;
-            transform: translate(-2px, -2px);
-            box-shadow: 6px 6px 0px #1D1D1B;
+        /* Ajuste para ícones/emojis dentro dos botões de popover */
+        div[data-testid="stPopover"] p {{
+            color: inherit !important;
+            font-family: 'Archivo Black', sans-serif !important;
+            font-weight: bold !important;
+            margin: 0 !important;
         }}
 
-        /* Tabs (Abas) estilizadas */
+        /* 3. OUTROS COMPONENTES */
+        
+        /* Abas (Tabs) */
         div[data-baseweb="tab-list"] {{
             gap: 10px;
             background-color: transparent;
@@ -97,7 +119,7 @@ st.markdown(f"""
             background-color: #E20613 !important;
         }}
 
-        /* Estilização de Containers/Cards (Informações do dia) */
+        /* Cards e Expanders */
         div[data-testid="stExpander"], div[data-testid="stVerticalBlock"] > div[style*="border"] {{
             border: 3px solid #1D1D1B !important;
             border-radius: 0px !important;
@@ -105,52 +127,21 @@ st.markdown(f"""
             box-shadow: 6px 6px 0px #FFEB00 !important;
         }}
 
-        /* Input de texto */
+        /* Inputs de Texto */
         .stTextInput input {{
             border: 2px solid #1D1D1B !important;
             border-radius: 0px !important;
             text-align: center;
         }}
 
-        /* Ajuste de métricas */
+        /* Métricas */
         [data-testid="stMetricValue"] {{
             font-family: 'Archivo Black', sans-serif !important;
             color: #E20613 !important;
         }}
-        
-        /* Popover (Check-in/Out) - IGUAL AOS BOTÕES DE MISSÃO */
-        div[data-testid="stPopover"] {{
-            width: 100%;
-            display: flex;
-            justify-content: center;
-        }}
-
-        div[data-testid="stPopover"] > button {{
-            background-color: #E20613 !important;
-            color: white !important;
-            font-family: 'Archivo Black', sans-serif !important;
-            border: 3px solid #1D1D1B !important;
-            border-radius: 0px !important;
-            text-transform: uppercase;
-            font-style: italic;
-            box-shadow: 4px 4px 0px #1D1D1B !important;
-            transition: 0.3s;
-            width: 100% !important;
-            height: 3em;
-            margin: 0 auto; /* Centraliza */
-        }}
-
-        /* Efeito de passar o mouse no Popover */
-        div[data-testid="stPopover"] > button:hover {{
-            background-color: #FFEB00 !important;
-            color: #1D1D1B !important;
-            transform: translate(-2px, -2px);
-            box-shadow: 6px 6px 0px #1D1D1B !important;
-        }}
 
     </style>
 """, unsafe_allow_html=True)
-
 #agora
 
 agora = datetime.now()
@@ -432,8 +423,6 @@ if cargo_limpo in ["voluntario", "voluntário"]:
         # Botão pequeno apenas com o ícone para economizar espaço
         if st.button("🔄", help="Atualizar GPS"):
             st.rerun()
-
-    st.divider() # Uma linha fina para separar do resto
 
     tab_missoes, tab_contratos = st.tabs(["🚀 Missões e Presença", "📄 Meus Contratos"])
 
