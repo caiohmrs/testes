@@ -140,39 +140,7 @@ st.markdown(f"""
             color: #E20613 !important;
         }}
 
-        /* 4. LIMPEZA DE INTERFACE (MANTENDO A SIDEBAR) */
-        
-        /* Esconder o botão de Deploy */
-        .stDeployButton {{
-            display: none !important;
-        }}
 
-        /* Esconder o Menu Hambúrguer (três linhas no topo direito) */
-        [data-testid="stHeader"] {{
-            background-color: rgba(0,0,0,0) !important;
-            color: #1D1D1B !important;
-        }}
-        
-        #MainMenu {{
-            visibility: hidden !important;
-        }}
-
-        /* Esconder a linha colorida no topo */
-        div[data-testid="stDecoration"] {{
-            display: none !important;
-        }}
-
-        /* Esconder o rodapé "Made with Streamlit" */
-        footer {{
-            visibility: hidden !important;
-            display: none !important;
-        }}
-
-        /* Ajustar o preenchimento superior para acomodar o botão da sidebar */
-        .block-container {{
-            padding-top: 2rem !important;
-            padding-bottom: 0rem !important;
-        }}
 
     </style>
 """, unsafe_allow_html=True)
