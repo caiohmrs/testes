@@ -140,29 +140,37 @@ st.markdown(f"""
             color: #E20613 !important;
         }}
 
-        /* 4. LIMPEZA DE INTERFACE (REMOÇÃO DE DEPLOY, MENU E FOOTER) */
+        /* 4. LIMPEZA DE INTERFACE (MANTENDO A SIDEBAR) */
         
-        /* Ocultar o botão de Deploy, Menu Hambúrguer e a barra superior */
-        header[data-testid="stHeader"] {{
-            visibility: hidden !important;
-            height: 0px !important;
+        /* Esconder o botão de Deploy */
+        .stDeployButton {{
             display: none !important;
         }}
 
-        /* Ocultar a linha decorativa colorida no topo */
+        /* Esconder o Menu Hambúrguer (três linhas no topo direito) */
+        [data-testid="stHeader"] {{
+            background-color: rgba(0,0,0,0) !important;
+            color: #1D1D1B !important;
+        }}
+        
+        #MainMenu {{
+            visibility: hidden !important;
+        }}
+
+        /* Esconder a linha colorida no topo */
         div[data-testid="stDecoration"] {{
             display: none !important;
         }}
 
-        /* Ocultar o rodapé "Made with Streamlit" */
+        /* Esconder o rodapé "Made with Streamlit" */
         footer {{
             visibility: hidden !important;
             display: none !important;
         }}
 
-        /* Ajustar o preenchimento superior do app para não ficar um buraco vazio */
+        /* Ajustar o preenchimento superior para acomodar o botão da sidebar */
         .block-container {{
-            padding-top: 0rem !important;
+            padding-top: 2rem !important;
             padding-bottom: 0rem !important;
         }}
 
