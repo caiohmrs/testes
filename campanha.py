@@ -401,8 +401,6 @@ if cargo_limpo in ["voluntario", "voluntário"]:
         if st.button("🔄", help="Atualizar GPS"):
             st.rerun()
 
-    st.divider() # Uma linha fina para separar do resto
-
     tab_missoes, tab_contratos = st.tabs(["🚀 Missões e Presença", "📄 Meus Contratos"])
 
     with tab_missoes:
