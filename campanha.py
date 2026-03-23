@@ -213,6 +213,22 @@ def modal_checkout(u, agora):
         else:
             st.error("⚠️ VOCÊ PRECISA TIRAR A FOTO!")
 
+@st.dialog("COMANDO 2026: INFORME")
+def modal_mensagem_dia(mensagem):
+    st.markdown(f"""
+        <div style='background-color: #FFEB00; padding: 20px; border: 3px solid #1D1D1B; text-align: center;'>
+            <h2 style='margin:0; font-family: "Archivo Black", sans-serif; font-style: italic; color: #1D1D1B;'>MENSAGEM DO DIA</h2>
+            <hr style='border: 1px solid #1D1D1B;'>
+            <p style='font-size: 1.2rem; font-weight: bold; color: #1D1D1B;'>{mensagem}</p>
+        </div>
+        <br>
+    """, unsafe_allow_html=True)
+    
+    # O BOTÃO É O ÚNICO QUE MUDA O ESTADO
+    if st.button("ENTENDIDO / IR PARA MISSÕES", use_container_width=True, type="primary"):
+        st.session_state["mensagem_exibida"] = True  # <--- MUDANÇA AQUI
+        st.rerun()
+
 
 
 def _get_drive_credentials():
@@ -352,6 +368,10 @@ if "usuario_logado" not in st.session_state:
 if "logout_em_andamento" not in st.session_state:
     st.session_state["logout_em_andamento"] = False
 
+# ADICIONE ESTA LINHA AQUI:
+if "mensagem_exibida" not in st.session_state:
+    st.session_state["mensagem_exibida"] = False
+
 # Autologin via Cookie (Só tenta se não estiver saindo)
 if todos_os_cookies and not st.session_state["logout_em_andamento"]:
     user_id_cookie = todos_os_cookies.get("comando2026_user_id")
@@ -434,6 +454,7 @@ with st.sidebar:
         # 1. Sinaliza que o logout começou (bloqueia auto-login)
         st.session_state["logout_em_andamento"] = True
         st.session_state["usuario_logado"] = None
+        st.session_state["mensagem_exibida"] = False 
         
         # 2. Tenta deletar os cookies com chaves únicas
         try:
@@ -460,11 +481,22 @@ with st.sidebar:
         st.rerun()
 
 # --- PAINEL PRINCIPAL ---
+
 st.title(f"Painel: {u['Cargo']}")
 
 
 # --- VISÃO: VOLUNTÁRIO ---
 if cargo_limpo in ["voluntario", "voluntário"]:
+    
+    # 1. Carregar dados das mensagens
+    df_msgs = carregar_dados("Mensagens")
+    if df_msgs is not None:
+        msg_grupo = df_msgs[df_msgs['ID_Alvo'].astype(str) == str(u['ID_Grupo'])]
+        
+        # SÓ CHAMA O MODAL. NÃO MUDA A VARIÁVEL AQUI!
+        if not msg_grupo.empty and not st.session_state["mensagem_exibida"]:
+            m = msg_grupo.iloc[-1]
+            modal_mensagem_dia(m['Mensagem_Inicial']) 
     
     # 1. CAPTURA DE GPS COMPACTA
     location_data = get_geolocation()
@@ -481,7 +513,7 @@ if cargo_limpo in ["voluntario", "voluntário"]:
                 st.markdown("🟢 **GPS ATIVO**") # Texto simples em vez de st.success
             except:
                 st.session_state['last_coords'] = "Erro GPS"
-                st.markdown("🔴 **ERRO GPS**")
+                st.markdown("🔴 **ERRO GPS - Verifique se o GPS está ativado e conceda permissão**")
         else:
             st.session_state['last_coords'] = "Aguardando..."
             st.markdown("🟡 **BUSCANDO SINAL...**")
@@ -497,22 +529,14 @@ if cargo_limpo in ["voluntario", "voluntário"]:
         df_msgs = carregar_dados("Mensagens")
         df_usuarios = carregar_dados("Usuarios")
         
-        # Mensagem do Dia
-        if df_msgs is not None:
-            msg_grupo = df_msgs[df_msgs['ID_Alvo'].astype(str) == str(u['ID_Grupo'])]
-            if not msg_grupo.empty:
-                m = msg_grupo.iloc[-1]
-                with st.container():
-                    st.markdown("""
-                        <div style='background-color: #FFEB00; padding: 20px; border: 3px solid #1D1D1B;'>
-                            <h2 style='margin:0;'>MENSAGEM DO DIA</h2>
-                            <p style='font-size: 1.2rem; font-weight: bold;'>{}</p>
-                        </div>
-                    """.format(m['Mensagem_Inicial']), unsafe_allow_html=True)
-
-        # Presença
+        # Presença  
         st.divider()
-        st.subheader("Registro de Presença")
+        st.markdown("""
+            <div style='background-color: #FFEB00; padding: 15px; border: 4px solid #1D1D1B; box-shadow: 8px 8px 0px #1D1D1B; text-align: center; margin-bottom: 25px;'>
+                <h2 style='margin:0; font-size: 1.8rem; font-style: italic; color: #1D1D1B;'>Registro de Presença</h2>
+            </div>
+        """, unsafe_allow_html=True)
+
         c1, c2 = st.columns(2)
         
         with c1:
@@ -525,24 +549,57 @@ if cargo_limpo in ["voluntario", "voluntário"]:
 
 
 
-
-
-        # Missões (Botões de sugestão)
+# --- SEÇÃO DE MISSÕES (ESTILO BRIEFING) ---
         if df_msgs is not None and not msg_grupo.empty:
             st.divider()
             m = msg_grupo.iloc[-1]
-            col_m1, col_m2 = st.columns(2)
-            with col_m1:
-                if st.button(f"📲 {m['Sugestao_1']}", use_container_width=True):
-                    registrar_acao(u['ID_Usuario'], f"Sugestão 1: {m['Sugestao_1']}", localizacao=st.session_state.get('last_coords'))
-                    st.link_button("🚀 Abrir Instagram", "https://www.instagram.com/maxmacieldf/", use_container_width=True)
-            with col_m2:
-                if st.button(f"💬 {m['Sugestao_2']}", use_container_width=True):
-                    registrar_acao(u['ID_Usuario'], f"Sugestão 2: {m['Sugestao_2']}", localizacao=st.session_state.get('last_coords'))
             
-            t_txt = m['Tarefa_Direcionada'] if str(m['Tarefa_Direcionada']) != "nan" else "Tarefa Geral"
-            if st.button(f"🚩 {t_txt}", use_container_width=True):
-                registrar_acao(u['ID_Usuario'], f"Tarefa: {t_txt}", localizacao=st.session_state.get('last_coords'))
+            # 1. CABEÇALHO DA SEÇÃO
+            st.markdown("""
+                <div style='background-color: #FFEB00; padding: 15px; border: 4px solid #1D1D1B; box-shadow: 8px 8px 0px #1D1D1B; text-align: center; margin-bottom: 25px;'>
+                    <h2 style='margin:0; font-size: 1.8rem; font-style: italic; color: #1D1D1B;'>🚀 MISSÕES DO DIA</h2>
+                </div>
+            """, unsafe_allow_html=True)
+
+            # 2. TAREFA DIRECIONADA (A MISSÃO PRINCIPAL - DESTAQUE TOTAL)
+            t_txt = str(m['Tarefa_Direcionada']).upper() if str(m['Tarefa_Direcionada']) != "nan" else "TAREFA GERAL"
+            
+            with st.container(border=True): # O CSS global vai aplicar a sombra amarela aqui
+                st.markdown(f"<h3 style='text-align: center; color: #1D1D1B; margin-bottom: 10px;'>🚩 MISSÃO PRIORITÁRIA</h3>", unsafe_allow_html=True)
+                st.markdown(f"<p style='text-align: center; font-weight: bold; font-size: 1.1rem;'>{t_txt}</p>", unsafe_allow_html=True)
+                
+                if st.button(f"CONCLUIR: {t_txt[:20]}...", use_container_width=True, key="btn_tarefa_principal"):
+                    registrar_acao(u['ID_Usuario'], f"TAREFA CONCLUÍDA: {t_txt}", localizacao=st.session_state.get('last_coords'))
+                    st.success("MISSÃO REGISTRADA!")
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # 3. SUGESTÕES DE AÇÃO (BOTÕES LADO A LADO)
+            st.markdown("<h3 style='font-size: 1.2rem;'>📲 AÇÕES RÁPIDAS</h3>", unsafe_allow_html=True)
+            col_m1, col_m2 = st.columns(2)
+
+            with col_m1:
+                # Sugestão 1 (Geralmente Instagram)
+                label_s1 = str(m['Sugestao_1']).upper()
+                if st.button(f"🔗 {label_s1}", use_container_width=True, key="btn_s1"):
+                    registrar_acao(u['ID_Usuario'], f"AÇÃO: {label_s1}", localizacao=st.session_state.get('last_coords'))
+                    # Mostra o link de redirecionamento logo abaixo ao clicar
+                    st.markdown(f"""
+                        <a href="https://www.instagram.com/maxmacieldf/" target="_blank">
+                            <div style='background-color: #1D1D1B; color: #FFEB00; text-align: center; padding: 10px; border: 2px solid #FFEB00; font-weight: bold;'>
+                                CLIQUE AQUI P/ ABRIR INSTA
+                            </div>
+                        </a>
+                    """, unsafe_allow_html=True)
+
+            with col_m2:
+                # Sugestão 2 (Geralmente WhatsApp/Interação)
+                label_s2 = str(m['Sugestao_2']).upper()
+                if st.button(f"💬 {label_s2}", use_container_width=True, key="btn_s2"):
+                    registrar_acao(u['ID_Usuario'], f"AÇÃO: {label_s2}", localizacao=st.session_state.get('last_coords'))
+                    st.toast("Ação registrada!", icon="💬")
+
+            st.markdown("<br>", unsafe_allow_html=True)
 
     with tab_contratos:
         # (Seu código de contratos permanece o mesmo, chamando carregar_dados e as funções de upload)
