@@ -138,32 +138,37 @@ st.markdown(f"""
         [data-testid="stMetricValue"] {{
             font-family: 'Archivo Black', sans-serif !important;
             color: #E20613 !important;
+        }}
 
-
-        /* 1. OCULTAR O BOTÃO DE DEPLOY E O MENU HAMBÚRGUER */
+        /* 4. LIMPEZA DE INTERFACE (REMOÇÃO DE DEPLOY, MENU E FOOTER) */
+        
+        /* Ocultar o botão de Deploy, Menu Hambúrguer e a barra superior */
         header[data-testid="stHeader"] {{
-            visibility: hidden;
-            height: 0%;
+            visibility: hidden !important;
+            height: 0px !important;
+            display: none !important;
         }}
 
-        /* 2. OCULTAR A LINHA COLORIDA NO TOPO (DECORATION) */
+        /* Ocultar a linha decorativa colorida no topo */
         div[data-testid="stDecoration"] {{
-            display: none;
+            display: none !important;
         }}
 
-        /* 3. OCULTAR O RODAPÉ "MADE WITH STREAMLIT" */
+        /* Ocultar o rodapé "Made with Streamlit" */
         footer {{
-            visibility: hidden;
+            visibility: hidden !important;
+            display: none !important;
         }}
 
-        /* 4. AJUSTE DE MARGEM PARA COMPENSAR A BARRA SUMIDA */
+        /* Ajustar o preenchimento superior do app para não ficar um buraco vazio */
         .block-container {{
-            padding-top: 1rem !important;
-        }}
+            padding-top: 0rem !important;
+            padding-bottom: 0rem !important;
         }}
 
     </style>
 """, unsafe_allow_html=True)
+
 #agora
 
 agora = datetime.now()
