@@ -4,7 +4,7 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 import extra_streamlit_components as stx
-from streamlit_geolocation import streamlit_geolocation
+from streamlit_js_eval import streamlit_js_eval
 
 # Diferenciando os tipos de credenciais
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
@@ -213,23 +213,29 @@ with st.sidebar:
 # --- PAINEL PRINCIPAL ---
 st.title(f"Painel: {u['Cargo']}")
 
+
 # --- VISÃO: VOLUNTÁRIO ---
 if cargo_limpo in ["voluntario", "voluntário"]:
     
-    # 1. CAPTURA DE GPS NO TOPO
+    # 1. CAPTURA DE GPS AUTOMÁTICA (Sem botão invisível)
+    # Este código roda um JavaScript no navegador para pegar a posição
     st.markdown("### 📍 Localização")
+    
+    # Tentativa de captura
+    loc_data = streamlit_js_eval(
+        js_expressions='navigator.geolocation.getCurrentPosition(pos => { window.parent.postMessage({type: "streamlit:setComponentValue", value: pos.coords.latitude + "," + pos.coords.longitude}, "*"); }, err => { console.log(err); });', 
+        key='get_gps_coords'
+    )
+
     with st.container(border=True):
-        col_gps_1, col_gps_2 = st.columns([1, 2])
-        with col_gps_1:
-            location = streamlit_geolocation()
-        with col_gps_2:
-            if location and location.get('latitude'):
-                coords_str = f"{location['latitude']},{location['longitude']}"
-                st.success("Sinal de GPS: OK")
-                st.session_state['last_coords'] = coords_str
-            else:
-                st.warning("Clique em 'Get Location'")
-                st.session_state['last_coords'] = "GPS Não Capturado"
+        if loc_data and "," in str(loc_data):
+            st.success(f"✅ Localização capturada!")
+            st.session_state['last_coords'] = loc_data
+        else:
+            st.warning("📡 Aguardando sinal de GPS... Por favor, autorize o acesso à localização no seu navegador.")
+            if st.button("🔄 Tentar Capturar Novamente"):
+                st.rerun()
+            st.session_state['last_coords'] = "GPS Não Capturado"
 
     tab_missoes, tab_contratos = st.tabs(["🚀 Missões e Presença", "📄 Meus Contratos"])
 
