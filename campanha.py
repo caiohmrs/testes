@@ -269,12 +269,12 @@ if cargo_limpo in ["voluntario", "voluntário"]:
                 foto_in = st.camera_input("Foto para Check-in", key="cam_in")
                 if st.button("Confirmar Check-in", use_container_width=True, type="primary"):
                     if foto_in:
-                        gps_val = st.session_state.get('last_coords', "Sem GPS")
+                        gps_in = st.session_state.get('last_coords', "Sem GPS")
                         with st.status("Processando...", expanded=True) as status:
                             nome_img = f"checkin_{u['Nome']}_{agora.strftime('%d-%m-%Y_%H-%M')}.jpg"
                             link = salvar_foto_drive(foto_in, nome_img)
                             if link:
-                                registrar_acao(u['ID_Usuario'], f"Check-in | Foto: {link}", localizacao=gps_val)
+                                registrar_acao(u['ID_Usuario'], f"Check-in | Foto: {link}", localizacao=gps_in)
                                 cookie_manager.set("comando2026_checkin_time", agora.strftime("%Y-%m-%d %H:%M:%S"))
                                 status.update(label="✅ Sucesso!", state="complete")
                                 st.rerun()
@@ -285,12 +285,12 @@ if cargo_limpo in ["voluntario", "voluntário"]:
                 foto_out = st.camera_input("Foto para Check-out", key="cam_out")
                 if st.button("Confirmar Check-out", use_container_width=True, type="primary"):
                     if foto_out:
-                        gps_val = st.session_state.get('last_coords', "Sem GPS")
+                        gps_out = st.session_state.get('last_coords', "Sem GPS")
                         with st.status("Finalizando...", expanded=True) as status:
                             nome_img = f"checkout_{u['Nome']}_{agora.strftime('%d-%m-%Y_%H-%M')}.jpg"
                             link = salvar_foto_drive(foto_out, nome_img)
                             if link:
-                                registrar_acao(u['ID_Usuario'], f"Check-out | Foto: {link}", localizacao=gps_val)
+                                registrar_acao(u['ID_Usuario'], f"Check-out | Foto: {link}", localizacao=gps_out)
                                 cookie_manager.delete("comando2026_checkin_time")
                                 status.update(label="✅ Sucesso!", state="complete")
                                 st.rerun()
