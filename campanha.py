@@ -493,15 +493,42 @@ with st.sidebar:
         # 5. Recarrega a página, voltando para o login
         st.rerun()
 
-# --- TÍTULO PERSONALIZADO (BEM-VINDO) ---
+        
+# --- CABEÇALHO BEM-VINDO (VERSÃO SEM QUEBRA DE LINHA) ---
 nome_primeiro = u['Nome'].split()[0].upper()
 
 st.markdown(f"""
-    <div style='text-align: center; margin-top: 10px; margin-bottom: 20px;'>
-        <h1 style='font-family: "Archivo Black", sans-serif; font-size: 2rem; line-height: 1; font-style: italic; text-transform: uppercase; color: #1D1D1B; margin: 0;'>
+    <div style='
+        background-color: #FFEB00; 
+        padding: 15px; 
+        border: 4px solid #1D1D1B; 
+        box-shadow: 8px 8px 0px #1D1D1B; 
+        text-align: center;
+        width: 90%;
+        margin: 10px auto 25px auto;
+    '>
+        <h3 style='
+            margin: 0; 
+            font-size: 1.1rem; 
+            font-family: "Archivo Black", sans-serif; 
+            font-style: italic; 
+            color: #1D1D1B;
+            line-height: 1;
+        '>
             BEM-VINDO,
-        </h1>
-        <h1 style='font-family: "Archivo Black", sans-serif; font-size: 3.5rem; line-height: 0.9; font-style: italic; text-transform: uppercase; color: #E20613; margin: 0;'>
+        </h3>
+        <h1 style='
+            margin: 0; 
+            font-size: 2.6rem; /* Reduzi um pouco para nomes longos caberem */
+            font-family: "Archivo Black", sans-serif; 
+            font-style: italic; 
+            text-transform: uppercase; 
+            color: #E20613;
+            line-height: 1.1;
+            white-space: nowrap;  /* <--- FORÇA O NOME EM UMA LINHA SÓ */
+            overflow: hidden;     /* <--- EVITA QUE O NOME SAIA DO QUADRO */
+            text-overflow: clip; 
+        '>
             {nome_primeiro}
         </h1>
     </div>
