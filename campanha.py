@@ -493,9 +493,19 @@ with st.sidebar:
         # 5. Recarrega a página, voltando para o login
         st.rerun()
 
-# --- PAINEL PRINCIPAL ---
+# --- TÍTULO PERSONALIZADO (BEM-VINDO) ---
+nome_primeiro = u['Nome'].split()[0].upper()
 
-st.title(f"Painel: {u['Cargo']}")
+st.markdown(f"""
+    <div style='text-align: center; margin-top: 10px; margin-bottom: 20px;'>
+        <h1 style='font-family: "Archivo Black", sans-serif; font-size: 2rem; line-height: 1; font-style: italic; text-transform: uppercase; color: #1D1D1B; margin: 0;'>
+            BEM-VINDO,
+        </h1>
+        <h1 style='font-family: "Archivo Black", sans-serif; font-size: 3.5rem; line-height: 0.9; font-style: italic; text-transform: uppercase; color: #E20613; margin: 0;'>
+            {nome_primeiro}
+        </h1>
+    </div>
+""", unsafe_allow_html=True)
 
 
 # --- VISÃO: VOLUNTÁRIO ---
