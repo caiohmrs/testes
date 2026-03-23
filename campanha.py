@@ -15,20 +15,109 @@ from googleapiclient.http import MediaIoBaseUpload
 from googleapiclient.discovery import build
 
 # --- CONFIGURAÇÃO INICIAL ---
-st.set_page_config(page_title="Comando 2026", layout="centered")
-
-# CSS para melhorar a experiência mobile
-st.markdown("""
+st.markdown("<h1 style='font-size: 3rem;'>COMANDO 2026</h1>", unsafe_allow_html=True)
+# --- ESTILIZAÇÃO VISUAL "COMANDO 2026" ---
+st.markdown(f"""
     <style>
-        .stButton button { width: 100%; border-radius: 10px; height: 3em; }
-        .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-        .stTabs [data-baseweb="tab"] { 
-            background-color: #f0f2f6; 
-            border-radius: 10px 10px 0px 0px; 
-            padding: 10px;
-        }
+        /* Importando fonte robusta */
+        @import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Roboto:wght@400;700&display=swap');
+
+        /* Fundo principal do App */
+        .stApp {{
+            background-color: #FFFFFF;
+            color: #1D1D1B;
+            font-family: 'Roboto', sans-serif;
+        }}
+
+        /* Sidebar com fundo Amarelo */
+        section[data-testid="stSidebar"] {{
+            background-color: #FFEB00 !important;
+            border-right: 5px solid #1D1D1B;
+        }}
+        
+        section[data-testid="stSidebar"] .stMarkdown, section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2 {{
+            color: #1D1D1B !important;
+        }}
+
+        /* Títulos com estilo Impacto/Slanted */
+        h1, h2, h3 {{
+            font-family: 'Archivo Black', sans-serif !important;
+            text-transform: uppercase;
+            font-style: italic;
+            color: #1D1D1B;
+            letter-spacing: -1px;
+        }}
+
+        /* Botão Primário (Vermelho como nas artes) */
+        .stButton > button {{
+            background-color: #E20613 !important;
+            color: white !important;
+            font-family: 'Archivo Black', sans-serif !important;
+            border: 3px solid #1D1D1B !important;
+            border-radius: 0px !important; /* Estilo mais bruto/reto */
+            text-transform: uppercase;
+            transition: 0.3s;
+            box-shadow: 4px 4px 0px #1D1D1B;
+        }}
+
+        .stButton > button:hover {{
+            background-color: #FFEB00 !important;
+            color: #1D1D1B !important;
+            transform: translate(-2px, -2px);
+            box-shadow: 6px 6px 0px #1D1D1B;
+        }}
+
+        /* Tabs (Abas) estilizadas */
+        div[data-baseweb="tab-list"] {{
+            gap: 10px;
+            background-color: transparent;
+        }}
+
+        div[data-baseweb="tab"] {{
+            background-color: #FFEB00 !important;
+            border: 2px solid #1D1D1B !important;
+            border-radius: 0px !important;
+            font-weight: bold !important;
+            color: #1D1D1B !important;
+            padding: 10px 20px !important;
+        }}
+
+        div[data-baseweb="tab-highlight"] {{
+            background-color: #E20613 !important;
+        }}
+
+        /* Estilização de Containers/Cards (Informações do dia) */
+        div[data-testid="stExpander"], div[data-testid="stVerticalBlock"] > div[style*="border"] {{
+            border: 3px solid #1D1D1B !important;
+            border-radius: 0px !important;
+            background-color: #F4F4F4 !important;
+            box-shadow: 6px 6px 0px #FFEB00 !important;
+        }}
+
+        /* Input de texto */
+        .stTextInput input {{
+            border: 2px solid #1D1D1B !important;
+            border-radius: 0px !important;
+        }}
+
+        /* Ajuste de métricas */
+        [data-testid="stMetricValue"] {{
+            font-family: 'Archivo Black', sans-serif !important;
+            color: #E20613 !important;
+        }}
+        
+        /* Popover (Check-in/Out) */
+        div[data-testid="stPopover"] > button {{
+            background-color: #1D1D1B !important;
+            color: #FFEB00 !important;
+            border-radius: 0px !important;
+            font-weight: bold;
+        }}
     </style>
 """, unsafe_allow_html=True)
+
+
+#agora
 
 agora = datetime.now()
 
@@ -281,7 +370,13 @@ if cargo_limpo in ["voluntario", "voluntário"]:
             msg_grupo = df_msgs[df_msgs['ID_Alvo'].astype(str) == str(u['ID_Grupo'])]
             if not msg_grupo.empty:
                 m = msg_grupo.iloc[-1]
-                st.info(f"**MENSAGEM DO DIA:**\n\n{m['Mensagem_Inicial']}")
+                with st.container():
+                    st.markdown("""
+                        <div style='background-color: #FFEB00; padding: 20px; border: 3px solid #1D1D1B;'>
+                            <h2 style='margin:0;'>MENSAGEM DO DIA</h2>
+                            <p style='font-size: 1.2rem; font-weight: bold;'>{}</p>
+                        </div>
+                    """.format(m['Mensagem_Inicial']), unsafe_allow_html=True)
 
         # Presença
         st.divider()
