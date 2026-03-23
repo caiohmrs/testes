@@ -257,18 +257,26 @@ if not todos_os_cookies:
 if "usuario_logado" not in st.session_state:
     st.session_state["usuario_logado"] = None
 
-# Autologin via Cookie
-user_id_cookie = todos_os_cookies.get("comando2026_user_id")
-if user_id_cookie and st.session_state["usuario_logado"] is None:
-    df_usuarios = carregar_dados("Usuarios")
-    if df_usuarios is not None:
-        user_match = df_usuarios[df_usuarios['ID_Usuario'].str.lower() == user_id_cookie.lower().strip()]
-        if not user_match.empty:
-            st.session_state["usuario_logado"] = user_match.iloc[0].to_dict()
-            st.rerun()
+if "logout_em_andamento" not in st.session_state:
+    st.session_state["logout_em_andamento"] = False
+
+# Autologin via Cookie (Só tenta se não estiver saindo)
+if todos_os_cookies and not st.session_state["logout_em_andamento"]:
+    user_id_cookie = todos_os_cookies.get("comando2026_user_id")
+    
+    if user_id_cookie and st.session_state["usuario_logado"] is None:
+        df_usuarios = carregar_dados("Usuarios")
+        if df_usuarios is not None:
+            user_match = df_usuarios[df_usuarios['ID_Usuario'].str.lower() == user_id_cookie.lower().strip()]
+            if not user_match.empty:
+                st.session_state["usuario_logado"] = user_match.iloc[0].to_dict()
+                st.rerun()
 
 # --- TELA DE LOGIN ---
 if st.session_state["usuario_logado"] is None:
+    # Reseta o sinal de logout para permitir novo login
+    st.session_state["logout_em_andamento"] = False
+    
     col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
     with col_l2:
         st.markdown("<h1 style='text-align: center;'>🚀</h1><h2 style='text-align: center;'>Comando 2026</h2>", unsafe_allow_html=True)
@@ -297,30 +305,32 @@ with st.sidebar:
     st.caption(f"Cargo: {u['Cargo']}")
     
     if st.button("Sair / Trocar Conta", use_container_width=True):
-        # 1. Tentativa segura de deletar o cookie de login
+        # 1. Sinaliza que o logout começou (bloqueia auto-login)
+        st.session_state["logout_em_andamento"] = True
+        st.session_state["usuario_logado"] = None
+        
+        # 2. Tenta deletar os cookies com chaves únicas
         try:
-            # Verificamos se ele existe antes de tentar deletar para evitar o KeyError
-            if "comando2026_user_id" in cookie_manager.get_all():
-                cookie_manager.delete("comando2026_user_id")
-        except Exception:
-            pass # Se falhar na lib, ignoramos e seguimos com a limpeza do state
-
-        # 2. Limpeza adicional (Opcional: limpa o cookie de check-in também ao sair)
+            cookie_manager.delete("comando2026_user_id", key="del_user")
+        except:
+            pass
+            
         try:
-            if "comando2026_checkin_time" in cookie_manager.get_all():
-                cookie_manager.delete("comando2026_checkin_time")
-        except Exception:
+            cookie_manager.delete("comando2026_checkin_time", key="del_check")
+        except:
             pass
 
-        # 3. Limpa as variáveis de memória do Streamlit
+        st.success("Saindo e limpando dados...")
+        
+        # 3. Limpa as memórias da sessão e os caches de dados
         st.session_state.clear()
+        st.cache_data.clear()
         
-        st.success("Saindo...")
+        # 4. Pausa crucial para o navegador apagar os cookies de fato
+        import time
+        time.sleep(2)
         
-        # 4. Pausa crucial para o navegador processar a deleção dos cookies
-        time.sleep(3)
-        
-        # 5. Recarrega para a tela de login
+        # 5. Recarrega a página, voltando para o login
         st.rerun()
 
 # --- PAINEL PRINCIPAL ---
