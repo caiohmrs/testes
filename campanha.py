@@ -509,7 +509,7 @@ st.markdown(f"""
     '>
         <h3 style='
             margin: 0; 
-            font-size: 1.1rem; 
+            font-size: 1.5rem; 
             font-family: "Archivo Black", sans-serif; 
             font-style: italic; 
             color: #1D1D1B;
