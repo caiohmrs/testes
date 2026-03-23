@@ -148,6 +148,73 @@ agora = datetime.now()
 
 # --- FUNÇÕES DE APOIO ---
 
+
+# --- MODAIS DE PRESENÇA (DIALOG) ---
+
+@st.dialog("REGISTRO DE ENTRADA")
+def modal_checkin(u, agora):
+    st.markdown("""
+        <div style='background-color: #FFEB00; padding: 15px; border: 3px solid #1D1D1B; text-align: center; margin-bottom: 20px;'>
+            <h2 style='margin:0; font-size: 1.5rem; font-style: italic; color: #1D1D1B;'>INICIAR MISSÃO</h2>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    foto_in = st.camera_input("FOTO OBRIGATÓRIA", key="cam_in_dialog")
+    
+    if st.button("CONFIRMAR CHECK-IN AGORA", use_container_width=True, type="primary"):
+        if foto_in:
+            gps_in = st.session_state.get('last_coords', "Sem GPS")
+            with st.status("🚀 PROCESSANDO REGISTRO...", expanded=True) as status:
+                nome_img = f"checkin_{u['Nome']}_{agora.strftime('%d-%m-%Y_%H-%M')}.jpg"
+                link = salvar_foto_drive(foto_in, nome_img)
+                
+                if link:
+                    registrar_acao(u['ID_Usuario'], f"Check-in | Foto: {link}", localizacao=gps_in)
+                    try:
+                        horario_formatado = agora.strftime("%Y-%m-%d %H:%M:%S")
+                        cookie_manager.set("comando2026_checkin_time", horario_formatado)
+                    except Exception:
+                        pass
+                    
+                    status.update(label="✅ ENTRADA REGISTRADA!", state="complete")
+                    time.sleep(2)
+                    st.rerun()
+        else:
+            st.error("⚠️ VOCÊ PRECISA TIRAR A FOTO!")
+
+@st.dialog("REGISTRO DE SAÍDA")
+def modal_checkout(u, agora):
+    st.markdown("""
+        <div style='background-color: #FFEB00; padding: 15px; border: 3px solid #1D1D1B; text-align: center; margin-bottom: 20px;'>
+            <h2 style='margin:0; font-size: 1.5rem; font-style: italic; color: #1D1D1B;'>FINALIZAR MISSÃO</h2>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    foto_out = st.camera_input("FOTO OBRIGATÓRIA", key="cam_out_dialog")
+    
+    if st.button("CONFIRMAR SAÍDA AGORA", use_container_width=True, type="primary"):
+        if foto_out:
+            gps_out = st.session_state.get('last_coords', "Sem GPS")
+            with st.status("📡 PROCESSANDO SAÍDA...", expanded=True) as status:
+                nome_img = f"checkout_{u['Nome']}_{agora.strftime('%d-%m-%Y_%H-%M')}.jpg"
+                link = salvar_foto_drive(foto_out, nome_img)
+                
+                if link:
+                    registrar_acao(u['ID_Usuario'], f"Check-out | Foto: {link}", localizacao=gps_out)
+                    try:
+                        if "comando2026_checkin_time" in cookie_manager.get_all():
+                            cookie_manager.delete("comando2026_checkin_time")
+                    except Exception:
+                        pass
+                    
+                    status.update(label="✅ SAÍDA REGISTRADA!", state="complete")
+                    time.sleep(2)
+                    st.rerun()
+        else:
+            st.error("⚠️ VOCÊ PRECISA TIRAR A FOTO!")
+
+
+
 def _get_drive_credentials():
     """Usa OAuthCredentials (Refresh Token) para os 15GB do Drive"""
     try:
@@ -449,70 +516,17 @@ if cargo_limpo in ["voluntario", "voluntário"]:
         c1, c2 = st.columns(2)
         
         with c1:
-            # Popover estilizado para Check-in
-            with st.popover("🏁 ENTRADA (CHECK-IN)", use_container_width=True):
-                st.markdown("""
-                    <div style='background-color: #FFEB00; padding: 10px; border: 2px solid #1D1D1B; text-align: center; margin-bottom: 15px;'>
-                        <h3 style='margin:0; font-size: 1.2rem; font-style: italic;'>REGISTRAR INÍCIO</h3>
-                    </div>
-                """, unsafe_allow_html=True)
-                
-                foto_in = st.camera_input("FOTO OBRIGATÓRIA", key="cam_in")
-                
-                if st.button("CONFIRMAR CHECK-IN", use_container_width=True, type="primary"):
-                    if foto_in:
-                        gps_in = st.session_state.get('last_coords', "Sem GPS")
-                        with st.status("🚀 PROCESSANDO...", expanded=True) as status:
-                            nome_img = f"checkin_{u['Nome']}_{agora.strftime('%d-%m-%Y_%H-%M')}.jpg"
-                            link = salvar_foto_drive(foto_in, nome_img)
-                            
-                            if link:
-                                registrar_acao(u['ID_Usuario'], f"Check-in | Foto: {link}", localizacao=gps_in)
-                                
-                                try:
-                                    horario_formatado = agora.strftime("%Y-%m-%d %H:%M:%S")
-                                    cookie_manager.set("comando2026_checkin_time", horario_formatado)
-                                except Exception:
-                                    pass
-                                
-                                status.update(label="✅ REGISTRO CONCLUÍDO!", state="complete")
-                                time.sleep(3)
-                                st.rerun()
-                    else: 
-                        st.error("⚠️ A FOTO É OBRIGATÓRIA!")
-
+            # O botão já herda o estilo vermelho/sombra do seu CSS global
+            if st.button("🏁 ENTRADA (CHECK-IN)", use_container_width=True, key="btn_modal_in"):
+                modal_checkin(u, agora)
         with c2:
-            # Popover estilizado para Check-out
-            with st.popover("🏁 SAÍDA (CHECK-OUT)", use_container_width=True):
-                st.markdown("""
-                    <div style='background-color: #FFEB00; padding: 10px; border: 2px solid #1D1D1B; text-align: center; margin-bottom: 15px;'>
-                        <h3 style='margin:0; font-size: 1.2rem; font-style: italic;'>REGISTRAR TÉRMINO</h3>
-                    </div>
-                """, unsafe_allow_html=True)
-                
-                foto_out = st.camera_input("FOTO OBRIGATÓRIA", key="cam_out")
-                
-                if st.button("CONFIRMAR CHECK-OUT", use_container_width=True, type="primary"):
-                    if foto_out:
-                        gps_out = st.session_state.get('last_coords', "Sem GPS")
-                        with st.status("📡 FINALIZANDO...", expanded=True) as status:
-                            nome_img = f"checkout_{u['Nome']}_{agora.strftime('%d-%m-%Y_%H-%M')}.jpg"
-                            link = salvar_foto_drive(foto_out, nome_img)
-                            
-                            if link:
-                                registrar_acao(u['ID_Usuario'], f"Check-out | Foto: {link}", localizacao=gps_out)
-                                
-                                try:
-                                    if "comando2026_checkin_time" in cookie_manager.get_all():
-                                        cookie_manager.delete("comando2026_checkin_time")
-                                except Exception:
-                                    pass
-                                
-                                status.update(label="✅ MISSÃO FINALIZADA!", state="complete")
-                                time.sleep(3)
-                                st.rerun()
-                    else: 
-                        st.error("⚠️ A FOTO É OBRIGATÓRIA!")
+            if st.button("🏁 SAÍDA (CHECK-OUT)", use_container_width=True, key="btn_modal_out"):
+                modal_checkout(u, agora)
+
+
+
+
+
         # Missões (Botões de sugestão)
         if df_msgs is not None and not msg_grupo.empty:
             st.divider()
@@ -548,7 +562,7 @@ if cargo_limpo in ["voluntario", "voluntário"]:
                                 st.success("Enviado!")
                                 st.rerun()
 
-# --- VISÃO: SUPERVISOR ---
+# --- VISÃO: SUPERVISOR --- 
 elif cargo_limpo == "supervisor":
     st.subheader("📈 Gestão de Equipe")
     df_usuarios = carregar_dados("Usuarios")
