@@ -26,7 +26,7 @@ st.markdown(f"""
             color-scheme: light !important;
         }}
 
-        /* 1. CENTRALIZAÇÃO E FUNDO GLOBAL */
+        /* 1. CENTRALIZAÇÃO E FUNDO GRADIENTE PREMIUM (OPÇÃO B) */
         [data-testid="stVerticalBlock"] > div {{
             display: flex;
             justify-content: center;
@@ -35,11 +35,20 @@ st.markdown(f"""
         }}
 
         .stApp {{
-            background-color: #FFFFFF !important;
+            /* Gradiente diagonal cinza azulado premium - Opção B */
+            background: linear-gradient(135deg, #E9ECEF 0%, #ADB5BD 100%) !important;
+            background-attachment: fixed !important;
             color: #1D1D1B !important;
             font-family: 'Roboto', sans-serif;
         }}
 
+        /* Transparência total dos containers para o gradiente brilhar */
+        [data-testid="stAppViewContainer"], 
+        [data-testid="stHeader"], 
+        [data-testid="stVerticalBlock"],
+        [data-testid="stMainBlockContainer"] {{
+            background-color: transparent !important;
+        }}
         /* 2. SIDEBAR AMARELA */
         section[data-testid="stSidebar"] {{
             background-color: #FFEB00 !important;
