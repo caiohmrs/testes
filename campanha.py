@@ -16,13 +16,12 @@ from googleapiclient.discovery import build
 
 # --- CONFIGURAÇÃO INICIAL ---
 
-# --- ESTILIZAÇÃO VISUAL UNIFICADA "COMANDO 2026" ---
+# --- ESTILIZAÇÃO VISUAL UNIFICADA "COMANDO 2026" - VERSÃO FINAL CORRIGIDA ---
 st.markdown(f"""
     <style>
         /* 0. CONFIGURAÇÕES TÉCNICAS E FONTES */
         @import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Roboto:wght@400;700&display=swap');
 
-        /* Forçar Light Mode e impedir inversão de cores do sistema */
         :root {{
             color-scheme: light !important;
         }}
@@ -46,140 +45,111 @@ st.markdown(f"""
             background-color: #FFEB00 !important;
             border-right: 5px solid #1D1D1B !important;
         }}
-        
-        section[data-testid="stSidebar"] .stMarkdown, 
-        section[data-testid="stSidebar"] h1, 
-        section[data-testid="stSidebar"] h2,
-        section[data-testid="stSidebar"] p {{
-            color: #1D1D1B !important;
-        }}
 
-        /* 3. TÍTULOS ESTILO CARTAZ/URBANO */
+        /* 3. TÍTULOS ESTILO CARTAZ */
         h1, h2, h3 {{
             font-family: 'Archivo Black', sans-serif !important;
             text-transform: uppercase;
             font-style: italic;
             color: #1D1D1B !important;
-            letter-spacing: -1px;
             text-align: center;
         }}
 
         /* 4. PADRONIZAÇÃO TOTAL DE BOTÕES (MISSÕES + POPOVER) */
         .stButton > button, 
         div[data-testid="stPopover"] > button {{
-            background-color: #E20613 !important; /* Vermelho */
-            color: #FFFFFF !important;           /* Texto Branco */
+            background-color: #E20613 !important;
+            color: #FFFFFF !important;
             font-family: 'Archivo Black', sans-serif !important;
-            border: 3px solid #1D1D1B !important; /* Borda Grossa */
-            border-radius: 0px !important;        /* Pontas Retas */
+            border: 3px solid #1D1D1B !important;
+            border-radius: 0px !important;
             text-transform: uppercase !important;
-            font-style: italic !important;
-            box-shadow: 4px 4px 0px #1D1D1B !important; /* Sombra Sólida */
+            box-shadow: 4px 4px 0px #1D1D1B !important;
             width: 100% !important;
             min-height: 3.5rem !important;
-            transition: 0.2s !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
         }}
 
-        /* Efeito Hover/Click para botões */
-        .stButton > button:hover, 
-        .stButton > button:active,
-        .stButton > button:focus,
-        div[data-testid="stPopover"] > button:hover,
-        div[data-testid="stPopover"] > button:active,
-        div[data-testid="stPopover"] > button:focus {{
-            background-color: #FFEB00 !important; /* Vira Amarelo */
-            color: #1D1D1B !important;           /* Texto Preto */
-            transform: translate(-2px, -2px) !important;
-            box-shadow: 6px 6px 0px #1D1D1B !important;
-            border: 3px solid #1D1D1B !important;
-        }}
-
-        /* Ajuste de ícones e textos dentro do Popover */
-        div[data-testid="stPopover"] p {{
-            color: inherit !important;
-            font-family: 'Archivo Black', sans-serif !important;
-            margin: 0 !important;
-        }}
-
-        /* 5. ABAS (TABS) ESTILO ADESIVO/CARTAZ */
+        /* 5. ABAS (TABS) - ESTILO ADESIVO URBANO (REFORÇADO) */
+        
+        /* Container das abas */
         div[data-baseweb="tab-list"] {{
-            gap: 12px !important;
+            gap: 10px !important;
             background-color: transparent !important;
-            justify-content: center !important;
-            padding: 15px 0 !important;
-            width: 100% !important;
+            padding: 10px 0 !important;
         }}
 
-        div[data-baseweb="tab"] {{
-            background-color: #FFEB00 !important; /* Amarelo Base */
+        /* Estilo base de cada aba (botão) */
+        button[data-baseweb="tab"] {{
+            background-color: #FFEB00 !important; /* Amarelo */
             border: 3px solid #1D1D1B !important;
             border-radius: 0px !important;
-            padding: 10px 18px !important;
+            padding: 10px 20px !important;
             font-family: 'Archivo Black', sans-serif !important;
             text-transform: uppercase !important;
             font-style: italic !important;
             color: #1D1D1B !important;
-            transition: 0.3s !important;
             box-shadow: 4px 4px 0px #1D1D1B !important;
+            transition: 0.2s !important;
+            margin-bottom: 10px !important;
         }}
 
-        /* Aba Ativa (Selecionada) */
-        div[aria-selected="true"] {{
-            background-color: #E20613 !important; /* Fica Vermelha */
+        /* Aba Selecionada (Ativa) */
+        button[data-baseweb="tab"][aria-selected="true"] {{
+            background-color: #E20613 !important; /* Vira Vermelho */
             color: #FFFFFF !important;
             transform: translate(-2px, -2px) !important;
             box-shadow: 6px 6px 0px #1D1D1B !important;
         }}
 
-        /* Remover a linha inferior original do Streamlit */
+        /* Remover a linha vermelha/azul padrão embaixo das abas */
         div[data-baseweb="tab-highlight"] {{
             display: none !important;
         }}
-
-        /* 6. OUTROS COMPONENTES (CARDS, INPUTS, LIMPEZA) */
         
-        /* Expanders e Containers com borda */
+        /* Ajuste de texto dentro da aba */
+        button[data-baseweb="tab"] p {{
+            font-size: 0.85rem !important;
+            font-weight: bold !important;
+            color: inherit !important;
+        }}
+
+        /* 6. OUTROS COMPONENTES */
+        
         div[data-testid="stExpander"], div[data-testid="stVerticalBlock"] > div[style*="border"] {{
             border: 3px solid #1D1D1B !important;
-            border-radius: 0px !important;
             background-color: #F4F4F4 !important;
             box-shadow: 6px 6px 0px #FFEB00 !important;
-            color: #1D1D1B !important;
         }}
 
-        /* Inputs de Texto */
         .stTextInput input {{
             border: 2px solid #1D1D1B !important;
-            border-radius: 0px !important;
             text-align: center !important;
             background-color: #FFFFFF !important;
-            color: #1D1D1B !important;
         }}
 
-        /* Métricas */
-        [data-testid="stMetricValue"] {{
-            font-family: 'Archivo Black', sans-serif !important;
-            color: #E20613 !important;
+        /* LIMPEZA DE INTERFACE */
+        .stDeployButton, #MainMenu, div[data-testid="stDecoration"], footer {{
+            display: none !important;
         }}
 
-    
-        /* Ajuste do conteúdo superior */
+        header[data-testid="stHeader"] {{
+            background-color: rgba(0,0,0,0) !important;
+        }}
+
         .block-container {{
             padding-top: 2rem !important;
-            padding-bottom: 2rem !important;
         }}
 
-        /* Ajuste para mobile (não esmagar o texto das abas) */
+        /* Ajuste Mobile */
         @media (max-width: 768px) {{
-            div[data-baseweb="tab"] {{
-                font-size: 0.75rem !important;
-                padding: 8px 12px !important;
+            button[data-baseweb="tab"] {{
+                font-size: 0.7rem !important;
+                padding: 8px 10px !important;
             }}
         }}
-
     </style>
 """, unsafe_allow_html=True)
 
