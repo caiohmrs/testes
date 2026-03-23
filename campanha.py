@@ -376,34 +376,32 @@ st.title(f"Painel: {u['Cargo']}")
 # --- VISÃO: VOLUNTÁRIO ---
 if cargo_limpo in ["voluntario", "voluntário"]:
     
-    st.markdown("### 📍 Localização")
-    
-    # 1. TENTA CAPTURAR AUTOMATICAMENTE
-    # Isso abre o pedido de permissão do navegador
+    # 1. CAPTURA DE GPS COMPACTA
     location_data = get_geolocation()
-
-    with st.container(border=True):
+    
+    # Criamos uma linha fina para o GPS
+    col_status, col_btn = st.columns([3, 1])
+    
+    with col_status:
         if location_data:
-            # Se o componente respondeu, extraímos as coordenadas
             try:
                 lat = location_data['coords']['latitude']
                 lon = location_data['coords']['longitude']
-                coords_str = f"{lat},{lon}"
-                
-                st.success(f"✅ GPS Ativo")
-                st.session_state['last_coords'] = coords_str
+                st.session_state['last_coords'] = f"{lat},{lon}"
+                st.markdown("🟢 **GPS ATIVO**") # Texto simples em vez de st.success
             except:
-                st.error("❌ GPS bloqueado ou erro de permissão.")
-                st.session_state['last_coords'] = "Erro na captura"
+                st.session_state['last_coords'] = "Erro GPS"
+                st.markdown("🔴 **ERRO GPS**")
         else:
-            # Enquanto o usuário não permite ou o GPS não responde
-            st.warning("📡 Aguardando GPS...")
-            st.info("💡 **Dica:** Verifique se o GPS do celular está ligado e se você autorizou o navegador a usar sua localização.")
+            st.session_state['last_coords'] = "Aguardando..."
+            st.markdown("🟡 **BUSCANDO SINAL...**")
             
-            if st.button("🔄 Atualizar Sinal"):
-                st.rerun()
-            
-            st.session_state['last_coords'] = "Aguardando GPS"
+    with col_btn:
+        # Botão pequeno apenas com o ícone para economizar espaço
+        if st.button("🔄", help="Atualizar GPS"):
+            st.rerun()
+
+    st.divider() # Uma linha fina para separar do resto
 
     tab_missoes, tab_contratos = st.tabs(["🚀 Missões e Presença", "📄 Meus Contratos"])
 
