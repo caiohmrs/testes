@@ -6,6 +6,8 @@ import streamlit as st
 import extra_streamlit_components as stx
 from streamlit_js_eval import get_geolocation
 import time
+import urllib.parse
+from datetime import datetime, timedelta
 
 # Diferenciando os tipos de credenciais
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
@@ -166,7 +168,8 @@ st.markdown(f"""
 st.markdown('<meta name="color-scheme" content="light">', unsafe_allow_html=True)
 #agora
 
-agora = datetime.now()
+# Força o GMT-3 subtraindo 3 horas do horário do servidor
+agora = datetime.now() - timedelta(hours=3)
 
 # --- FUNÇÕES DE APOIO ---
 
@@ -643,7 +646,7 @@ if cargo_limpo in ["voluntario", "voluntário"]:
             # --- LÓGICA WHATSAPP ---
             if st.button("💬 TRAGA UM NOVO AMIGO PARA SER VOLUNTÁRIO!", use_container_width=True, key="fixo_whats"):
                 # 1. Registra a ação no banco de dados
-                registrar_acao(u['ID_Usuario'], "AÇÃO: MOBILIZAÇÃO WHATSAPP", localizacao=st.session_state.get('last_coords'))
+                registrar_acao(u['ID_Usuario'], "AÇÃO: TRAZER NOVO VOLUNTÁRIO!", localizacao=st.session_state.get('last_coords'))
                 
                 # 2. Prepara a mensagem padrão (URL Encoded)
                 # Você pode alterar o texto abaixo como quiser!
@@ -686,17 +689,124 @@ if cargo_limpo in ["voluntario", "voluntário"]:
 
 # --- VISÃO: SUPERVISOR --- 
 elif cargo_limpo == "supervisor":
-    st.subheader("📈 Gestão de Equipe")
+
     df_usuarios = carregar_dados("Usuarios")
     df_logs = carregar_dados("Logs")
+
     if df_usuarios is not None and df_logs is not None:
-        equipe = df_usuarios[df_usuarios['ID_Supervisor'].astype(str) == str(u['ID_Usuario'])]
-        for _, vol in equipe.iterrows():
-            with st.expander(f"👤 {vol['Nome']}"):
-                v_logs = df_logs[df_logs['ID_Usuario'] == vol['ID_Usuario']].tail(5)
-                st.dataframe(v_logs[['Tipo_Acao', 'Data_Hora', 'Localização']], use_container_width=True)
+        # Cálculos
+        minha_equipe = df_usuarios[df_usuarios['ID_Supervisor'].astype(str) == str(u['ID_Usuario'])]
+        hoje_str = datetime.now().strftime("%d/%m/%Y")
+        logs_hoje = df_logs[df_logs['Data_Hora'].str.contains(hoje_str)]
+        ativos = logs_hoje[logs_hoje['ID_Usuario'].isin(minha_equipe['ID_Usuario'])]
+        
+        total_vol = len(minha_equipe)
+        num_ativos = ativos[ativos['Tipo_Acao'].str.contains("Check-in")]['ID_Usuario'].nunique()
+        total_acoes = len(ativos)
+
+        # 2. BARRA DE MÉTRICAS (SEM QUEBRA DE LINHA)
+        st.markdown(f"""
+            <div style="display: flex; justify-content: space-between; gap: 5px; width: 100%; margin-bottom: 20px;">
+                <div style="flex: 1; background-color: #FFFFFF; border: 2px solid #1D1D1B; box-shadow: 3px 3px 0px #1D1D1B; text-align: center; padding: 5px 2px;">
+                    <p style="margin: 0; font-size: 0.6rem; font-family: 'Archivo Black'; color: #666; white-space: nowrap;">EQUIPE</p>
+                    <p style="margin: 0; font-size: 1.2rem; font-family: 'Archivo Black'; color: #1D1D1B; line-height: 1;">{total_vol}</p>
+                </div>
+                <div style="flex: 1; background-color: #FFFFFF; border: 2px solid #1D1D1B; box-shadow: 3px 3px 0px #1D1D1B; text-align: center; padding: 5px 2px;">
+                    <p style="margin: 0; font-size: 0.6rem; font-family: 'Archivo Black'; color: #666; white-space: nowrap;">ATIVOS</p>
+                    <p style="margin: 0; font-size: 1.2rem; font-family: 'Archivo Black'; color: #E20613; line-height: 1;">{num_ativos}</p>
+                </div>
+                <div style="flex: 1; background-color: #FFFFFF; border: 2px solid #1D1D1B; box-shadow: 3px 3px 0px #1D1D1B; text-align: center; padding: 5px 2px;">
+                    <p style="margin: 0; font-size: 0.6rem; font-family: 'Archivo Black'; color: #666; white-space: nowrap;">AÇÕES</p>
+                    <p style="margin: 0; font-size: 1.2rem; font-family: 'Archivo Black'; color: #1D1D1B; line-height: 1;">{total_acoes}</p>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+# 3. LISTAGEM DIRETA E ESTÁVEL
+        st.markdown("<h3 style='font-size: 1.2rem; text-align: left; margin-bottom: 10px;'>📋 STATUS DA EQUIPE</h3>", unsafe_allow_html=True)
+        
+        for _, vol in minha_equipe.iterrows():
+            # Filtra os logs do voluntário hoje
+            logs_vol_hoje = df_logs[(df_logs['ID_Usuario'] == vol['ID_Usuario']) & (df_logs['Data_Hora'].str.contains(hoje_str))]
+            
+            # Lógica de Engajamento
+            tem_checkin = not logs_vol_hoje[logs_vol_hoje['Tipo_Acao'].str.contains("Check-in")].empty
+            tem_redes = not logs_vol_hoje[logs_vol_hoje['Tipo_Acao'].str.contains("AÇÃO:")].empty
+            tem_missao = not logs_vol_hoje[logs_vol_hoje['Tipo_Acao'].str.contains("CONCLUIU:")].empty
+            
+            # Define o texto de status
+            if tem_checkin and tem_missao:
+                label = "🔥 COMPLETO"
+            elif tem_checkin:
+                label = "🟢 EM CAMPO"
+            elif tem_redes:
+                label = "🟡 REDES"
+            else:
+                label = "⚪ OFF"
+
+            # USA O EXPANDER NATIVO (O nome aparece inteiro e sem caixas extras)
+            # O título fica: STATUS | NOME COMPLETO
+            with st.expander(f"{label} | {vol['Nome'].upper()}"):
+                
+                # Exibe as ações do dia
+                if not logs_vol_hoje.empty:
+                    st.write("**ATIVIDADES DE HOJE:**")
+                    for _, row in logs_vol_hoje[::-1].iterrows():
+                        hora = row['Data_Hora'].split()[-1]
+                        loc = str(row['Localização'])
+                        
+                        # Link de mapa simples e funcional
+                        mapa_link = ""
+                        if "," in loc:
+                            mapa_link = f" — [📍 VER NO MAPA](https://www.google.com/maps?q={loc})"
+                        
+                        st.markdown(f"- **{row['Tipo_Acao']}** ({hora}){mapa_link}")
+                else:
+                    st.info("Nenhuma atividade registrada hoje.")
+
+# --- BOTÕES DE AÇÃO DINÂMICOS DO SUPERVISOR ---
+                st.divider()
                 w_limpo = sanitize_whatsapp(vol['WhatsApp'])
-                st.link_button("Cobrar no WhatsApp", f"https://wa.me/{w_limpo}")
+                primeiro_nome = vol['Nome'].split()[0]
+                
+                c_wa1, c_wa2 = st.columns(2)
+                
+                with c_wa1:
+                    # 1. Lógica de Mensagem e Nome do Botão por Status
+                    if tem_checkin and tem_missao:
+                        btn_label = "🚀 PARABENIZAR"
+                        msg = f"Sensacional, {primeiro_nome}! Vi que você concluiu todas as missões de hoje. Esse é o espírito! Vamos pra cima! 🧢🔥"
+                    
+                    elif tem_checkin:
+                        btn_label = "💪 MOTIVAR"
+                        msg = f"Bora, {primeiro_nome}! Vi que já deu o check-in e está na rua. Boa atividade, qualquer coisa estou por aqui! 🚀"
+                    
+                    elif tem_redes:
+                        btn_label = "⚡ REFORÇAR"
+                        msg = f"Boa, {primeiro_nome}! Vi sua mobilização nas redes. Quando chegar na atividade de rua, não esquece de dar o check-in no app, beleza? 💪"
+                    
+                    else:
+                        btn_label = "⚠️ COBRAR"
+                        msg = f"Fala, {primeiro_nome}! Tudo certo? Notei que você ainda não iniciou as atividades no painel hoje. Algum imprevisto? Aguardo seu retorno!"
+
+                    # Botão Principal com nome dinâmico
+                    st.link_button(
+                        btn_label, 
+                        f"https://wa.me/{w_limpo}?text={urllib.parse.quote(msg)}", 
+                        use_container_width=True,
+                        type="primary" # Deixa o botão em destaque (vermelho no seu CSS)
+                    )
+                
+                with c_wa2:
+                    # Botão secundário apenas para abrir o chat sem mensagem pronta
+                    st.link_button(
+                        "💬 ABRIR CHAT", 
+                        f"https://wa.me/{w_limpo}", 
+                        use_container_width=True
+                    )
+
+
+
 
 
 # --- PERFIL: ADMIN ---
