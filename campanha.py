@@ -389,7 +389,6 @@ if "usuario_logado" not in st.session_state:
 if "logout_em_andamento" not in st.session_state:
     st.session_state["logout_em_andamento"] = False
 
-# ADICIONE ESTA LINHA AQUI:
 if "mensagem_exibida" not in st.session_state:
     st.session_state["mensagem_exibida"] = False
 
@@ -546,116 +545,126 @@ st.markdown(f"""
 # --- VISÃO: VOLUNTÁRIO ---
 if cargo_limpo in ["voluntario", "voluntário"]:
     
-    # 1. Carregar dados das mensagens
+    # 1. CARREGAMENTO PRÉVIO DA MENSAGEM (Para evitar o NameError 'm')
     df_msgs = carregar_dados("Mensagens")
-    msg_grupo = pd.DataFrame()
+    m = None  # Inicializamos m como vazio
+    
     if df_msgs is not None:
         msg_grupo = df_msgs[df_msgs['ID_Alvo'].astype(str) == str(u['ID_Grupo'])]
-        
-        # SÓ CHAMA O MODAL. NÃO MUDA A VARIÁVEL AQUI!
-        if not msg_grupo.empty and not st.session_state["mensagem_exibida"]:
-            m = msg_grupo.iloc[-1]
-            modal_mensagem_dia(m['Mensagem_Inicial']) 
-    
-    # 1. CAPTURA DE GPS COMPACTA
+        if not msg_grupo.empty:
+            m = msg_grupo.iloc[-1]  # Agora m existe para todo o código do voluntário
+            
+            # Chama o Modal do dia APENAS se não tiver sido exibido ainda
+            if not st.session_state["mensagem_exibida"]:
+                modal_mensagem_dia(m['Mensagem_Inicial'])
+
+    # 3. CAPTURA DE GPS COMPACTA
     location_data = get_geolocation()
-    
-    # Criamos uma linha fina para o GPS
     col_status, col_btn = st.columns([3, 1])
-    
     with col_status:
         if location_data:
             try:
                 lat = location_data['coords']['latitude']
                 lon = location_data['coords']['longitude']
                 st.session_state['last_coords'] = f"{lat},{lon}"
-                st.markdown("🟢 **GPS ATIVO**") # Texto simples em vez de st.success
+                st.markdown("🟢 **GPS ATIVO**")
             except:
                 st.session_state['last_coords'] = "Erro GPS"
-                st.markdown("🔴 **ERRO GPS - Verifique se o GPS está ativado e conceda permissão**")
+                st.markdown("🔴 **ERRO GPS**")
         else:
             st.session_state['last_coords'] = "Aguardando..."
             st.markdown("🟡 **BUSCANDO SINAL...**")
-            
     with col_btn:
-        # Botão pequeno apenas com o ícone para economizar espaço
         if st.button("🔄", help="Atualizar GPS"):
             st.rerun()
 
+    # 4. ABAS DE CONTEÚDO
     tab_missoes, tab_contratos = st.tabs(["🚀 Missões e Presença", "📄 Meus Contratos"])
 
     with tab_missoes:
-        # Presença  
+        # --- REGISTRO DE PRESENÇA ---
         st.divider()
         st.markdown("""
             <div style='background-color: #FFEB00; padding: 15px; border: 4px solid #1D1D1B; box-shadow: 8px 8px 0px #1D1D1B; text-align: center; margin-bottom: 25px;'>
-                <h2 style='margin:0; font-size: 1.8rem; font-style: italic; color: #1D1D1B;'>Registro de Presença</h2>
+                <h2 style='margin:0; font-size: 1.8rem; font-style: italic; color: #1D1D1B;'>REGISTRO DE PRESENÇA</h2>
             </div>
         """, unsafe_allow_html=True)
 
         c1, c2 = st.columns(2)
-        
         with c1:
-            # O botão já herda o estilo vermelho/sombra do seu CSS global
             if st.button("🏁 ENTRADA (CHECK-IN)", use_container_width=True, key="btn_modal_in"):
                 modal_checkin(u, agora)
         with c2:
             if st.button("🏁 SAÍDA (CHECK-OUT)", use_container_width=True, key="btn_modal_out"):
                 modal_checkout(u, agora)
 
+        # --- SEÇÃO DE MISSÕES (FIXAS) ---
+        st.divider()
+        st.markdown("""
+            <div style='background-color: #FFEB00; padding: 15px; border: 4px solid #1D1D1B; box-shadow: 8px 8px 0px #1D1D1B; text-align: center; margin-bottom: 25px;'>
+                <h2 style='margin:0; font-size: 1.8rem; font-style: italic; color: #1D1D1B;'>🚀 MISSÕES DIÁRIAS</h2>
+            </div>
+        """, unsafe_allow_html=True)
 
+        # TAREFA PRINCIPAL (Puxa da planilha se m existir, senão usa texto padrão)
+        if m is not None and str(m['Tarefa_Direcionada']) != "nan":
+            t_txt = str(m['Tarefa_Direcionada']).upper()
+        else:
+            t_txt = "MOBILIZAÇÃO GERAL E PANFLETAGEM"
 
-# --- SEÇÃO DE MISSÕES (ESTILO BRIEFING) ---
-        if df_msgs is not None and not msg_grupo.empty:
-            st.divider()
-            m = msg_grupo.iloc[-1]
+        with st.container(border=True): 
+            st.markdown(f"<h3 style='text-align: center; color: #1D1D1B; margin-bottom: 10px;'>🚩 MISSÃO PRIORITÁRIA</h3>", unsafe_allow_html=True)
+            st.markdown(f"<p style='text-align: center; font-weight: bold; font-size: 1.1rem;'>{t_txt}</p>", unsafe_allow_html=True)
             
-            # 1. CABEÇALHO DA SEÇÃO
-            st.markdown("""
-                <div style='background-color: #FFEB00; padding: 15px; border: 4px solid #1D1D1B; box-shadow: 8px 8px 0px #1D1D1B; text-align: center; margin-bottom: 25px;'>
-                    <h2 style='margin:0; font-size: 1.8rem; font-style: italic; color: #1D1D1B;'>🚀 MISSÕES DO DIA</h2>
-                </div>
-            """, unsafe_allow_html=True)
+            if st.button(f"CONCLUIR MISSÃO DE HOJE", use_container_width=True, key="btn_tarefa_fixa"):
+                registrar_acao(u['ID_Usuario'], f"CONCLUIU: {t_txt}", localizacao=st.session_state.get('last_coords'))
+                st.balloons()
+                st.success("MISSÃO REGISTRADA COM SUCESSO!")
 
-            # 2. TAREFA DIRECIONADA (A MISSÃO PRINCIPAL - DESTAQUE TOTAL)
-            t_txt = str(m['Tarefa_Direcionada']).upper() if str(m['Tarefa_Direcionada']) != "nan" else "TAREFA GERAL"
-            
-            with st.container(border=True): # O CSS global vai aplicar a sombra amarela aqui
-                st.markdown(f"<h3 style='text-align: center; color: #1D1D1B; margin-bottom: 10px;'>🚩 MISSÃO PRIORITÁRIA</h3>", unsafe_allow_html=True)
-                st.markdown(f"<p style='text-align: center; font-weight: bold; font-size: 1.1rem;'>{t_txt}</p>", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+
+# --- AÇÕES DE REDE FIXAS ---
+        st.markdown("<h3 style='font-size: 1.2rem;'>📲 AÇÕES DE REDE</h3>", unsafe_allow_html=True)
+        col_m1, col_m2 = st.columns(2)
+
+        with col_m1:
+            # --- LÓGICA INSTAGRAM ---
+            if st.button("📸 INTERAGIR NO INSTAGRAM", use_container_width=True, key="fixo_insta"):
+                registrar_acao(u['ID_Usuario'], "AÇÃO: INTERAÇÃO INSTAGRAM", localizacao=st.session_state.get('last_coords'))
+                st.markdown(f"""
+                    <a href="https://www.instagram.com/maxmacieldf/" target="_blank">
+                        <div style='background-color: #1D1D1B; color: #FFEB00; text-align: center; padding: 10px; border: 2px solid #FFEB00; font-weight: bold; font-size: 0.8rem;'>
+                            ABRIR PERFIL DO MAX ↗️
+                        </div>
+                    </a>
+                """, unsafe_allow_html=True)
+
+        with col_m2:
+            # --- LÓGICA WHATSAPP ---
+            if st.button("💬 MOBILIZAR NO WHATS", use_container_width=True, key="fixo_whats"):
+                # 1. Registra a ação no banco de dados
+                registrar_acao(u['ID_Usuario'], "AÇÃO: MOBILIZAÇÃO WHATSAPP", localizacao=st.session_state.get('last_coords'))
                 
-                if st.button(f"CONCLUIR: {t_txt[:20]}...", use_container_width=True, key="btn_tarefa_principal"):
-                    registrar_acao(u['ID_Usuario'], f"TAREFA CONCLUÍDA: {t_txt}", localizacao=st.session_state.get('last_coords'))
-                    st.success("MISSÃO REGISTRADA!")
+                # 2. Prepara a mensagem padrão (URL Encoded)
+                # Você pode alterar o texto abaixo como quiser!
+                mensagem_pronta = "Salve! Dá uma olhada no que o Max Maciel está fazendo pelo DF. Estou junto nessa campanha e gostaria do seu apoio. Vamos juntos? 🚀 https://www.instagram.com/maxmacieldf/"
+                
+                import urllib.parse
+                msg_url = urllib.parse.quote(mensagem_pronta)
+                
+                # 3. Mostra o botão de redirecionamento (estilo ID Visual)
+                st.markdown(f"""
+                    <a href="https://wa.me/?text={msg_url}" target="_blank">
+                        <div style='background-color: #1D1D1B; color: #FFEB00; text-align: center; padding: 10px; border: 2px solid #FFEB00; font-weight: bold; font-size: 0.8rem;'>
+                            ESCOLHER AMIGO ↗️
+                        </div>
+                    </a>
+                """, unsafe_allow_html=True)
 
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            # 3. SUGESTÕES DE AÇÃO (BOTÕES LADO A LADO)
-            st.markdown("<h3 style='font-size: 1.2rem;'>📲 AÇÕES RÁPIDAS</h3>", unsafe_allow_html=True)
-            col_m1, col_m2 = st.columns(2)
-
-            with col_m1:
-                # Sugestão 1 (Geralmente Instagram)
-                label_s1 = str(m['Sugestao_1']).upper()
-                if st.button(f"🔗 {label_s1}", use_container_width=True, key="btn_s1"):
-                    registrar_acao(u['ID_Usuario'], f"AÇÃO: {label_s1}", localizacao=st.session_state.get('last_coords'))
-                    # Mostra o link de redirecionamento logo abaixo ao clicar
-                    st.markdown(f"""
-                        <a href="https://www.instagram.com/maxmacieldf/" target="_blank">
-                            <div style='background-color: #1D1D1B; color: #FFEB00; text-align: center; padding: 10px; border: 2px solid #FFEB00; font-weight: bold;'>
-                                CLIQUE AQUI P/ ABRIR INSTA
-                            </div>
-                        </a>
-                    """, unsafe_allow_html=True)
-
-            with col_m2:
-                # Sugestão 2 (Geralmente WhatsApp/Interação)
-                label_s2 = str(m['Sugestao_2']).upper()
-                if st.button(f"💬 {label_s2}", use_container_width=True, key="btn_s2"):
-                    registrar_acao(u['ID_Usuario'], f"AÇÃO: {label_s2}", localizacao=st.session_state.get('last_coords'))
-                    st.toast("Ação registrada!", icon="💬")
-
-            st.markdown("<br>", unsafe_allow_html=True)
+    # --- TAB DE CONTRATOS (Permanece igual) ---
+    with tab_contratos:
+        # Seu código de contratos aqui...
+        pass
 
     with tab_contratos:
         # (Seu código de contratos permanece o mesmo, chamando carregar_dados e as funções de upload)
