@@ -629,7 +629,7 @@ if cargo_limpo in ["voluntario", "voluntário"]:
 
         with col_m1:
             # --- LÓGICA INSTAGRAM ---
-            if st.button("📸 INTERAGIR NO INSTAGRAM", use_container_width=True, key="fixo_insta"):
+            if st.button("📸 CURTA, COMENTE E COMPARTILHE NOSSO ÚLTIMO POST!", use_container_width=True, key="fixo_insta"):
                 registrar_acao(u['ID_Usuario'], "AÇÃO: INTERAÇÃO INSTAGRAM", localizacao=st.session_state.get('last_coords'))
                 st.markdown(f"""
                     <a href="https://www.instagram.com/maxmacieldf/" target="_blank">
@@ -641,7 +641,7 @@ if cargo_limpo in ["voluntario", "voluntário"]:
 
         with col_m2:
             # --- LÓGICA WHATSAPP ---
-            if st.button("💬 MOBILIZAR NO WHATS", use_container_width=True, key="fixo_whats"):
+            if st.button("💬 TRAGA UM NOVO AMIGO PARA SER VOLUNTÁRIO!", use_container_width=True, key="fixo_whats"):
                 # 1. Registra a ação no banco de dados
                 registrar_acao(u['ID_Usuario'], "AÇÃO: MOBILIZAÇÃO WHATSAPP", localizacao=st.session_state.get('last_coords'))
                 
