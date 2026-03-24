@@ -1,0 +1,18 @@
+[theme]
+# Força a base para o modo claro
+base="light"
+
+# Cores da Identidade Visual Max Maciel (Backup do CSS)
+primaryColor="#E20613"
+backgroundColor="#FFFFFF"
+secondaryBackgroundColor="#FFEB00"
+textColor="#1D1D1B"
+font="sans serif"
+
+[ui]
+# Esconde o seletor de tema no menu do usuário
+hideSidebarNav = false
+
+[client]
+# Desativa a detecção automática de tema do sistema operacional
+toolbarMode = "minimal"
