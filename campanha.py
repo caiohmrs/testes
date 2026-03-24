@@ -623,7 +623,7 @@ if cargo_limpo in ["voluntario", "voluntário"]:
             
             if st.button(f"CONCLUIR MISSÃO DE HOJE", use_container_width=True, key="btn_tarefa_fixa"):
                 registrar_acao(u['ID_Usuario'], f"CONCLUIU: {t_txt}", localizacao=st.session_state.get('last_coords'))
-                st.balloons()
+            
                 st.success("MISSÃO REGISTRADA COM SUCESSO!")
 
         st.markdown("<br>", unsafe_allow_html=True)
@@ -706,7 +706,7 @@ elif cargo_limpo == "supervisor":
         num_ativos = ativos[ativos['Tipo_Acao'].str.contains("Check-in")]['ID_Usuario'].nunique()
         total_acoes = len(ativos)
 
-        # 2. BARRA DE MÉTRICAS (SEM QUEBRA DE LINHA)
+        # 1. BARRA DE MÉTRICAS (HTML INLINE)
         st.markdown(f"""
             <div style="display: flex; justify-content: space-between; gap: 5px; width: 100%; margin-bottom: 20px;">
                 <div style="flex: 1; background-color: #FFFFFF; border: 2px solid #1D1D1B; box-shadow: 3px 3px 0px #1D1D1B; text-align: center; padding: 5px 2px;">
@@ -724,49 +724,62 @@ elif cargo_limpo == "supervisor":
             </div>
         """, unsafe_allow_html=True)
 
-# 3. LISTAGEM DIRETA E ESTÁVEL
+        # 2. LISTAGEM DIRETA E ESTÁVEL
         st.markdown("<h3 style='font-size: 1.2rem; text-align: left; margin-bottom: 10px;'>📋 STATUS DA EQUIPE</h3>", unsafe_allow_html=True)
         
         for _, vol in minha_equipe.iterrows():
             # Filtra os logs do voluntário hoje
             logs_vol_hoje = df_logs[(df_logs['ID_Usuario'] == vol['ID_Usuario']) & (df_logs['Data_Hora'].str.contains(hoje_str))]
+            ultimos_logs = logs_vol_hoje.tail(5)
             
             # Lógica de Engajamento
             tem_checkin = not logs_vol_hoje[logs_vol_hoje['Tipo_Acao'].str.contains("Check-in")].empty
-            tem_redes = not logs_vol_hoje[logs_vol_hoje['Tipo_Acao'].str.contains("AÇÃO:")].empty
             tem_missao = not logs_vol_hoje[logs_vol_hoje['Tipo_Acao'].str.contains("CONCLUIU:")].empty
+            tem_redes = not logs_vol_hoje[logs_vol_hoje['Tipo_Acao'].str.contains("AÇÃO:")].empty
             
             # Define o texto de status
-            if tem_checkin and tem_missao:
-                label = "🔥 COMPLETO"
-            elif tem_checkin:
-                label = "🟢 EM CAMPO"
-            elif tem_redes:
-                label = "🟡 REDES"
-            else:
-                label = "⚪ OFF"
+            if tem_checkin and tem_missao: status_label = "🔥 COMPLETO"
+            elif tem_checkin: status_label = "🟢 EM CAMPO"
+            elif tem_redes: status_label = "🟡 REDES"
+            else: status_label = "⚪ OFF"
 
-            # USA O EXPANDER NATIVO (O nome aparece inteiro e sem caixas extras)
-            # O título fica: STATUS | NOME COMPLETO
-            with st.expander(f"{label} | {vol['Nome'].upper()}"):
+# EXPANDER NATIVO
+            with st.expander(f"{status_label} | {vol['Nome'].upper()}"):
                 
-                # Exibe as ações do dia
-                if not logs_vol_hoje.empty:
-                    st.write("**ATIVIDADES DE HOJE:**")
-                    for _, row in logs_vol_hoje[::-1].iterrows():
-                        hora = row['Data_Hora'].split()[-1]
+                if not ultimos_logs.empty:
+                    # Inicia a string vazia
+                    feed_html = ""
+                    
+                    for _, row in ultimos_logs[::-1].iterrows():
+                        acao_raw = str(row['Tipo_Acao'])
+                        hora = row['Data_Hora'].split()[-1][:5]
+                        
+                        # Limpa o texto da ação
+                        texto_limpo = acao_raw.replace("AÇÃO: ", "").replace("CONCLUIU: ", "").split("|")[0].split("Foto:")[0].strip().upper()
+                        
                         loc = str(row['Localização'])
+                        botao_mapa = ""
                         
-                        # Link de mapa simples e funcional
-                        mapa_link = ""
+                        # --- BOTÃO DE MAPA REDUZIDO ---
+                        # Reduzimos padding, font-size e deixamos a borda/sombra mais delicadas
                         if "," in loc:
-                            mapa_link = f" — [📍 VER NO MAPA](https://www.google.com/maps?q={loc})"
-                        
-                        st.markdown(f"- **{row['Tipo_Acao']}** ({hora}){mapa_link}")
+                            botao_mapa = f"<a href='https://www.google.com/maps?q={loc}' target='_blank' style='background-color: #E20613; color: #FFFFFF; font-family: \"Archivo Black\", sans-serif; font-size: 0.55rem; padding: 4px 8px; text-decoration: none; border: 1px solid #1D1D1B; box-shadow: 2px 2px 0px #1D1D1B; text-transform: uppercase; white-space: nowrap;'>📍 MAPA</a>"
+
+                        # MONTANDO O HTML SEM QUEBRAS DE LINHA
+                        feed_html += "<div style='background-color: #F4F4F4; border: 2px solid #1D1D1B; padding: 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 3px 3px 0px #1D1D1B; margin-bottom: 10px;'>"
+                        feed_html += "<div style='display: flex; flex-direction: column;'>"
+                        feed_html += f"<span style='font-family: \"Archivo Black\", sans-serif; font-size: 0.85rem; color: #1D1D1B;'>{texto_limpo}</span>"
+                        feed_html += f"<span style='font-size: 0.75rem; color: #666; font-weight: bold; margin-top: 4px;'>🕒 {hora}</span>"
+                        feed_html += "</div>"
+                        feed_html += f"<div>{botao_mapa}</div>"
+                        feed_html += "</div>"
+                    
+                    # Renderiza tudo com segurança
+                    st.markdown(feed_html, unsafe_allow_html=True)
                 else:
                     st.info("Nenhuma atividade registrada hoje.")
 
-# --- BOTÕES DE AÇÃO DINÂMICOS DO SUPERVISOR ---
+                # --- BOTÕES DE AÇÃO DINÂMICOS DO SUPERVISOR ---
                 st.divider()
                 w_limpo = sanitize_whatsapp(vol['WhatsApp'])
                 primeiro_nome = vol['Nome'].split()[0]
@@ -774,43 +787,23 @@ elif cargo_limpo == "supervisor":
                 c_wa1, c_wa2 = st.columns(2)
                 
                 with c_wa1:
-                    # 1. Lógica de Mensagem e Nome do Botão por Status
                     if tem_checkin and tem_missao:
                         btn_label = "🚀 PARABENIZAR"
                         msg = f"Sensacional, {primeiro_nome}! Vi que você concluiu todas as missões de hoje. Esse é o espírito! Vamos pra cima! 🧢🔥"
-                    
                     elif tem_checkin:
                         btn_label = "💪 MOTIVAR"
                         msg = f"Bora, {primeiro_nome}! Vi que já deu o check-in e está na rua. Boa atividade, qualquer coisa estou por aqui! 🚀"
-                    
                     elif tem_redes:
                         btn_label = "⚡ REFORÇAR"
                         msg = f"Boa, {primeiro_nome}! Vi sua mobilização nas redes. Quando chegar na atividade de rua, não esquece de dar o check-in no app, beleza? 💪"
-                    
                     else:
                         btn_label = "⚠️ COBRAR"
                         msg = f"Fala, {primeiro_nome}! Tudo certo? Notei que você ainda não iniciou as atividades no painel hoje. Algum imprevisto? Aguardo seu retorno!"
 
-                    # Botão Principal com nome dinâmico
-                    st.link_button(
-                        btn_label, 
-                        f"https://wa.me/{w_limpo}?text={urllib.parse.quote(msg)}", 
-                        use_container_width=True,
-                        type="primary" # Deixa o botão em destaque (vermelho no seu CSS)
-                    )
+                    st.link_button(btn_label, f"https://wa.me/{w_limpo}?text={urllib.parse.quote(msg)}", use_container_width=True, type="primary")
                 
                 with c_wa2:
-                    # Botão secundário apenas para abrir o chat sem mensagem pronta
-                    st.link_button(
-                        "💬 ABRIR CHAT", 
-                        f"https://wa.me/{w_limpo}", 
-                        use_container_width=True
-                    )
-
-
-
-
-
+                    st.link_button("💬 ABRIR CHAT", f"https://wa.me/{w_limpo}", use_container_width=True)
 # --- PERFIL: ADMIN ---
 elif cargo_limpo == "admin":
         st.subheader("🛡️ Gestão Global do Sistema")
