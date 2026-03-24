@@ -166,10 +166,10 @@ st.markdown(f"""
 
 # Meta tag adicional para forçar Light Mode no Mobile
 st.markdown('<meta name="color-scheme" content="light">', unsafe_allow_html=True)
+
 #agora
 
-# Força o GMT-3 subtraindo 3 horas do horário do servidor
-agora = datetime.now() - timedelta(hours=3)
+agora = datetime.utcnow() - timedelta(hours=3)
 
 # --- FUNÇÕES DE APOIO ---
 
@@ -188,7 +188,7 @@ def modal_checkin(u, agora):
     
     if st.button("CONFIRMAR CHECK-IN AGORA", use_container_width=True, type="primary"):
         if foto_in:
-            agora_real = datetime.now()
+            agora_real = datetime.utcnow() - timedelta(hours=3)
             gps_in = st.session_state.get('last_coords', "Sem GPS")
             with st.status("🚀 PROCESSANDO REGISTRO...", expanded=True) as status:
                 nome_img = f"checkin_{u['Nome']}_{agora_real.strftime('%d-%m-%Y_%H-%M')}.jpg"
@@ -220,7 +220,7 @@ def modal_checkout(u, agora):
     
     if st.button("CONFIRMAR SAÍDA AGORA", use_container_width=True, type="primary"):
         if foto_out:
-            agora_real = datetime.now()
+            agora_real = datetime.utcnow() - timedelta(hours=3)
             gps_out = st.session_state.get('last_coords', "Sem GPS")
             with st.status("📡 PROCESSANDO SAÍDA...", expanded=True) as status:
                 nome_img = f"checkout_{u['Nome']}_{agora_real.strftime('%d-%m-%Y_%H-%M')}.jpg"
@@ -324,11 +324,13 @@ def registrar_acao(id_usuario, tipo_acao, localizacao="Não informada"):
         planilha_id = st.secrets["planilha"]["id"]
         planilha = client.open_by_key(planilha_id)
         aba = planilha.worksheet("Logs")
+        agora_br = datetime.utcnow() - timedelta(hours=3)
+        
         aba.append_row([
-            datetime.now().strftime("%Y%m%d%H%M%S"),
+            agora_br.strftime("%Y%m%d%H%M%S"),
             str(id_usuario),
             str(tipo_acao),
-            datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+            agora_br.strftime("%d/%m/%Y %H:%M:%S"),
             str(localizacao)
         ])
         st.toast(f"✅ Log: {tipo_acao}")
