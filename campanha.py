@@ -696,19 +696,30 @@ elif cargo_limpo == "supervisor":
     df_logs = carregar_dados("Logs")
 
     if df_usuarios is not None and df_logs is not None:
-        # Cálculos
         minha_equipe = df_usuarios[df_usuarios['ID_Supervisor'].astype(str) == str(u['ID_Usuario'])]
-        hoje_str = datetime.now().strftime("%d/%m/%Y")
-        logs_hoje = df_logs[df_logs['Data_Hora'].str.contains(hoje_str)]
-        ativos = logs_hoje[logs_hoje['ID_Usuario'].isin(minha_equipe['ID_Usuario'])]
+
+        # 1. CRIAMOS UM ESPAÇO EM BRANCO NO TOPO PARA AS MÉTRICAS
+        espaco_metricas = st.empty()
+
+        # 2. SELETOR DE DATA (Agora aparece entre as Métricas e o Status)
+        st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
+        c_data, c_vazio = st.columns([1.5, 1])
+        with c_data:
+            data_selecionada = st.date_input("📅 SELECIONE A DATA", datetime.now())
+        
+        data_str = data_selecionada.strftime("%d/%m/%Y")
+
+        # --- CÁLCULOS BASEADOS NA DATA SELECIONADA ---
+        logs_dia = df_logs[df_logs['Data_Hora'].str.contains(data_str)]
+        ativos_dia = logs_dia[logs_dia['ID_Usuario'].isin(minha_equipe['ID_Usuario'])]
         
         total_vol = len(minha_equipe)
-        num_ativos = ativos[ativos['Tipo_Acao'].str.contains("Check-in")]['ID_Usuario'].nunique()
-        total_acoes = len(ativos)
+        num_ativos = ativos_dia[ativos_dia['Tipo_Acao'].str.contains("Check-in")]['ID_Usuario'].nunique()
+        total_acoes = len(ativos_dia)
 
-        # 1. BARRA DE MÉTRICAS (HTML INLINE)
-        st.markdown(f"""
-            <div style="display: flex; justify-content: space-between; gap: 5px; width: 100%; margin-bottom: 20px;">
+        # 3. PREENCHEMOS O ESPAÇO DO TOPO COM AS MÉTRICAS CALCULADAS
+        espaco_metricas.markdown(f"""
+            <div style="display: flex; justify-content: space-between; gap: 5px; width: 100%; margin-top: 15px; margin-bottom: 5px;">
                 <div style="flex: 1; background-color: #FFFFFF; border: 2px solid #1D1D1B; box-shadow: 3px 3px 0px #1D1D1B; text-align: center; padding: 5px 2px;">
                     <p style="margin: 0; font-size: 0.6rem; font-family: 'Archivo Black'; color: #666; white-space: nowrap;">EQUIPE</p>
                     <p style="margin: 0; font-size: 1.2rem; font-family: 'Archivo Black'; color: #1D1D1B; line-height: 1;">{total_vol}</p>
@@ -724,86 +735,85 @@ elif cargo_limpo == "supervisor":
             </div>
         """, unsafe_allow_html=True)
 
-        # 2. LISTAGEM DIRETA E ESTÁVEL
-        st.markdown("<h3 style='font-size: 1.2rem; text-align: left; margin-bottom: 10px;'>📋 STATUS DA EQUIPE</h3>", unsafe_allow_html=True)
+# 4. TÍTULO DE STATUS (Com margin-top negativo para grudar no calendário)
+        st.markdown(f"<h3 style='font-size: 1.2rem; text-align: left; margin-bottom: 10px; margin-top: -15px;'>📋 STATUS ({data_str[:5]})</h3>", unsafe_allow_html=True)
         
+        # --- LOOP DE VOLUNTÁRIOS ---
         for _, vol in minha_equipe.iterrows():
-            # Filtra os logs do voluntário hoje
-            logs_vol_hoje = df_logs[(df_logs['ID_Usuario'] == vol['ID_Usuario']) & (df_logs['Data_Hora'].str.contains(hoje_str))]
-            ultimos_logs = logs_vol_hoje.tail(5)
+            logs_vol_dia = df_logs[(df_logs['ID_Usuario'] == vol['ID_Usuario']) & (df_logs['Data_Hora'].str.contains(data_str))]
+            ultimos_logs = logs_vol_dia.tail(5)
             
-            # Lógica de Engajamento
-            tem_checkin = not logs_vol_hoje[logs_vol_hoje['Tipo_Acao'].str.contains("Check-in")].empty
-            tem_missao = not logs_vol_hoje[logs_vol_hoje['Tipo_Acao'].str.contains("CONCLUIU:")].empty
-            tem_redes = not logs_vol_hoje[logs_vol_hoje['Tipo_Acao'].str.contains("AÇÃO:")].empty
+            tem_checkin = not logs_vol_dia[logs_vol_dia['Tipo_Acao'].str.contains("Check-in")].empty
+            tem_missao = not logs_vol_dia[logs_vol_dia['Tipo_Acao'].str.contains("CONCLUIU:")].empty
+            tem_redes = not logs_vol_dia[logs_vol_dia['Tipo_Acao'].str.contains("AÇÃO:")].empty
             
-            # Define o texto de status
             if tem_checkin and tem_missao: status_label = "🔥 COMPLETO"
             elif tem_checkin: status_label = "🟢 EM CAMPO"
             elif tem_redes: status_label = "🟡 REDES"
             else: status_label = "⚪ OFF"
 
-# EXPANDER NATIVO
             with st.expander(f"{status_label} | {vol['Nome'].upper()}"):
-                
                 if not ultimos_logs.empty:
-                    # Inicia a string vazia
                     feed_html = ""
-                    
                     for _, row in ultimos_logs[::-1].iterrows():
                         acao_raw = str(row['Tipo_Acao'])
                         hora = row['Data_Hora'].split()[-1][:5]
-                        
-                        # Limpa o texto da ação
                         texto_limpo = acao_raw.replace("AÇÃO: ", "").replace("CONCLUIU: ", "").split("|")[0].split("Foto:")[0].strip().upper()
-                        
                         loc = str(row['Localização'])
                         botao_mapa = ""
                         
-                        # --- BOTÃO DE MAPA REDUZIDO ---
-                        # Reduzimos padding, font-size e deixamos a borda/sombra mais delicadas
                         if "," in loc:
                             botao_mapa = f"<a href='https://www.google.com/maps?q={loc}' target='_blank' style='background-color: #E20613; color: #FFFFFF; font-family: \"Archivo Black\", sans-serif; font-size: 0.55rem; padding: 4px 8px; text-decoration: none; border: 1px solid #1D1D1B; box-shadow: 2px 2px 0px #1D1D1B; text-transform: uppercase; white-space: nowrap;'>📍 MAPA</a>"
 
-                        # MONTANDO O HTML SEM QUEBRAS DE LINHA
-                        feed_html += "<div style='background-color: #F4F4F4; border: 2px solid #1D1D1B; padding: 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 3px 3px 0px #1D1D1B; margin-bottom: 10px;'>"
-                        feed_html += "<div style='display: flex; flex-direction: column;'>"
+                        feed_html += f"<div style='background-color: #F4F4F4; border: 2px solid #1D1D1B; padding: 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 3px 3px 0px #1D1D1B; margin-bottom: 10px;'>"
+                        feed_html += f"<div style='display: flex; flex-direction: column;'>"
                         feed_html += f"<span style='font-family: \"Archivo Black\", sans-serif; font-size: 0.85rem; color: #1D1D1B;'>{texto_limpo}</span>"
                         feed_html += f"<span style='font-size: 0.75rem; color: #666; font-weight: bold; margin-top: 4px;'>🕒 {hora}</span>"
                         feed_html += "</div>"
                         feed_html += f"<div>{botao_mapa}</div>"
                         feed_html += "</div>"
                     
-                    # Renderiza tudo com segurança
                     st.markdown(feed_html, unsafe_allow_html=True)
                 else:
-                    st.info("Nenhuma atividade registrada hoje.")
+                    st.info(f"Nenhuma atividade registrada em {data_str[:5]}.")
 
-                # --- BOTÕES DE AÇÃO DINÂMICOS DO SUPERVISOR ---
                 st.divider()
                 w_limpo = sanitize_whatsapp(vol['WhatsApp'])
-                primeiro_nome = vol['Nome'].split()[0]
-                
+                p_nome = vol['Nome'].split()[0]
                 c_wa1, c_wa2 = st.columns(2)
                 
                 with c_wa1:
-                    if tem_checkin and tem_missao:
-                        btn_label = "🚀 PARABENIZAR"
-                        msg = f"Sensacional, {primeiro_nome}! Vi que você concluiu todas as missões de hoje. Esse é o espírito! Vamos pra cima! 🧢🔥"
-                    elif tem_checkin:
-                        btn_label = "💪 MOTIVAR"
-                        msg = f"Bora, {primeiro_nome}! Vi que já deu o check-in e está na rua. Boa atividade, qualquer coisa estou por aqui! 🚀"
-                    elif tem_redes:
-                        btn_label = "⚡ REFORÇAR"
-                        msg = f"Boa, {primeiro_nome}! Vi sua mobilização nas redes. Quando chegar na atividade de rua, não esquece de dar o check-in no app, beleza? 💪"
-                    else:
-                        btn_label = "⚠️ COBRAR"
-                        msg = f"Fala, {primeiro_nome}! Tudo certo? Notei que você ainda não iniciou as atividades no painel hoje. Algum imprevisto? Aguardo seu retorno!"
+                    # Correção: "btn_label, msg =" em todas as linhas
+                    if tem_checkin and tem_missao: 
+                        btn_label, msg = "🚀 PARABÉNS", f"Sensacional, {p_nome}! Vi seu relatório de {data_str[:5]}. Missão completa! 🔥"
+                    elif tem_checkin: 
+                        btn_label, msg = "💪 MOTIVAR", f"Bora, {p_nome}! Vi que no dia {data_str[:5]} você foi pra rua. Tamo junto! 🚀"
+                    elif tem_redes: 
+                        btn_label, msg = "⚡ REFORÇAR", f"Boa, {p_nome}! Vi sua mobilização digital no dia {data_str[:5]}. Nas próximas não esquece o check-in na rua! 💪"
+                    else: 
+                        btn_label, msg = "⚠️ COBRAR", f"Fala, {p_nome}! Tudo certo? Notei que não houve registro de atividades em {data_str[:5]}. Algum imprevisto?"
 
-                    st.link_button(btn_label, f"https://wa.me/{w_limpo}?text={urllib.parse.quote(msg)}", use_container_width=True, type="primary")
+                    st.link_button(btn_label, f"https://api.whatsapp.com/send?text={urllib.parse.quote(msg)}", use_container_width=True, type="primary")
                 
                 with c_wa2:
                     st.link_button("💬 ABRIR CHAT", f"https://wa.me/{w_limpo}", use_container_width=True)
+
+        # 5. BOTÃO DE ENVIAR RELATÓRIO NO FINAL (Abaixo de todos os box de voluntários)
+        st.markdown("<br>", unsafe_allow_html=True)
+        relatorio_msg = (
+            f"📊 *RELATÓRIO DA EQUIPE - COMANDO 2026*\n"
+            f"📅 Data: {data_str}\n"
+            f"👤 Supervisor: {nome_primeiro}\n\n"
+            f"👥 Total da Equipe: {total_vol}\n"
+            f"🔥 Ativos na Data: {num_ativos}\n"
+            f"🎯 Ações Realizadas: {total_acoes}\n\n"
+            f"Vamos pra cima! 🚀"
+        )
+        st.link_button("📲 ENVIAR RELATÓRIO P/ COORDENAÇÃO", f"https://api.whatsapp.com/send?text={urllib.parse.quote(relatorio_msg)}", use_container_width=True, type="primary")
+        st.markdown("<br><br>", unsafe_allow_html=True)
+
+
+
 # --- PERFIL: ADMIN ---
 elif cargo_limpo == "admin":
         st.subheader("🛡️ Gestão Global do Sistema")
