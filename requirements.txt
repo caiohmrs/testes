@@ -10,3 +10,4 @@ google-auth-oauthlib
 gspread
 oauth2client
 streamlit_js_eval
+xlsxwriter
