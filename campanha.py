@@ -532,6 +532,12 @@ with st.sidebar:
     st.write(f"Olá, **{u['Nome'].split()[0]}**")
     st.caption(f"Cargo: {u['Cargo']}")
     
+    # --- BOTÃO DE ATUALIZAR ---
+    if st.button("🔄 ATUALIZAR PAINEL", width="stretch"):
+        with st.spinner("Buscando dados..."):
+            st.cache_data.clear() # Limpa o cache para forçar nova leitura da planilha
+            st.rerun()
+
     if st.button("Sair / Trocar Conta", width='stretch'):
         # 1. Sinaliza que o logout começou (bloqueia auto-login)
         st.session_state["logout_em_andamento"] = True
