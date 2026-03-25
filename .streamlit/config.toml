@@ -10,7 +10,5 @@ textColor="#1D1D1B"
 font="sans serif"
 
 [client]
-# Esta é a opção correta para versões recentes se quiser esconder a navegação padrão de páginas
-showSidebarNavigation = false
-# Define o modo da barra de ferramentas (minimal remove o menu desnecessário)
 toolbarMode = "minimal"
+showSidebarNavigation = false
