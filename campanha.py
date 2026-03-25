@@ -8,6 +8,8 @@ from streamlit_js_eval import get_geolocation
 import time
 import urllib.parse
 from datetime import datetime, timedelta
+import xlsxwriter
+from geopy.geocoders import Nominatim
 
 # Diferenciando os tipos de credenciais
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
@@ -28,12 +30,9 @@ st.markdown(f"""
             color-scheme: light !important;
         }}
 
-        /* 1. CENTRALIZAÇÃO E FUNDO GRADIENTE PREMIUM (OPÇÃO B) */
         [data-testid="stVerticalBlock"] > div {{
-            display: flex;
-            justify-content: center;
-            align-items: center;
             width: 100%;
+            
         }}
 
         .stApp {{
@@ -163,6 +162,8 @@ st.markdown(f"""
 
         .block-container {{
             padding-top: 2rem !important;
+
+
         }}
 
         /* Ajuste Mobile */
@@ -171,7 +172,8 @@ st.markdown(f"""
                 font-size: 0.7rem !important;
                 padding: 8px 10px !important;
             }}
-        }}
+
+
     </style>
 """, unsafe_allow_html=True)
 
@@ -336,13 +338,19 @@ def registrar_acao(id_usuario, tipo_acao, localizacao="Não informada"):
         planilha = client.open_by_key(planilha_id)
         aba = planilha.worksheet("Logs")
         agora_br = datetime.utcnow() - timedelta(hours=3)
+        endereco = "Processando..."
+        if "," in localizacao:
+            endereco = obter_endereco_simples(localizacao)
+        else:
+            endereco = "Sem GPS"
         
         aba.append_row([
             agora_br.strftime("%Y%m%d%H%M%S"),
             str(id_usuario),
             str(tipo_acao),
             agora_br.strftime("%d/%m/%Y %H:%M:%S"),
-            str(localizacao)
+            str(localizacao),
+            str(endereco)
         ])
         st.toast(f"✅ Log: {tipo_acao}")
     except Exception as e:
@@ -394,6 +402,29 @@ def sanitize_whatsapp(v: str) -> str:
     if v is None: return ""
     return ''.join(filter(str.isdigit, str(v)))
 
+
+def obter_endereco_simples(coords_str):
+    """Converte 'lat, lon' em um endereço curto (Rua ou Bairro)"""
+    if not coords_str or "GPS" in coords_str or "," not in coords_str:
+        return "Local não identificado"
+    
+    try:
+        geolocator = Nominatim(user_agent="comando2026_geocoder")
+        location = geolocator.reverse(coords_str, timeout=10)
+        address = location.raw.get('address', {})
+        
+        # Tenta pegar as informações mais relevantes (Rua, Bairro ou Cidade)
+        rua = address.get('road', '')
+        bairro = address.get('suburb', '')
+        cidade = address.get('city', address.get('town', ''))
+        
+        if rua:
+            return f"{rua}, {bairro}".strip(", ")
+        return f"{bairro}, {cidade}".strip(", ")
+    except:
+        return "Endereço indisponível"
+
+
 # --- LOGICA DE COOKIES ---
 cookie_manager = stx.CookieManager()
 todos_os_cookies = cookie_manager.get_all()
@@ -433,7 +464,7 @@ if st.session_state["usuario_logado"] is None:
     with col_l2:
         # TÍTULO ESTILIZADO (Igual às artes)
         st.markdown("""
-            <h1 style='text-align: center; font-size: 4rem; line-height: 0.9; margin-bottom: 20px;'>
+            <h1 style='text-align: center; font-size: 4rem; line-height: 0.9; margin-bottom: 20px; margin-top: -100px'>
                 Max Maciel<br><span style='color: #E20613;'>🧢 2026</span>
             </h1>
         """, unsafe_allow_html=True)
@@ -447,15 +478,12 @@ if st.session_state["usuario_logado"] is None:
                     </h2>
                 </div>
             """, unsafe_allow_html=True)
-            st.divider()
             # Espaço entre o título e o input
-            st.markdown("<div style='margin-top: -20px;'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='margin-top: 30px;'></div>", unsafe_allow_html=True)
             
             # O input e o botão herdarão o estilo centralizado se estiverem dentro de colunas ou se o CSS global permitir
             # Mas para garantir o visual dentro da caixa, costumamos usar este truque de CSS:
             email_input = st.text_input("ID DE USUÁRIO (E-MAIL)", placeholder="seu@email.com", label_visibility="collapsed")
-            
-            st.markdown("<br>", unsafe_allow_html=True)
             
             if st.button("ENTRAR NO PAINEL", use_container_width=True, type="primary"):
                 with st.spinner("VALIDANDO..."):
@@ -542,15 +570,16 @@ st.markdown(f"""
         </h3>
         <h1 style='
             margin: 0; 
-            font-size: 2.2rem; /* Reduzi um pouco para nomes longos caberem */
+            font-size: 2.2rem; 
             font-family: "Archivo Black", sans-serif; 
             font-style: italic; 
             text-transform: uppercase; 
             color: #E20613;
             line-height: 1.1;
-            white-space: nowrap;  /* <--- FORÇA O NOME EM UMA LINHA SÓ */
-            overflow: hidden;     /* <--- EVITA QUE O NOME SAIA DO QUADRO */
+            white-space: nowrap;  
+            overflow: hidden;     
             text-overflow: clip; 
+            margin-top: -30px;
         '>
             {nome_primeiro}
         </h1>
@@ -827,9 +856,24 @@ elif cargo_limpo == "supervisor":
 
 # --- PERFIL: ADMIN (COORDENAÇÃO) ---
 elif cargo_limpo == "admin":
+    
+    # 0. CSS EXCLUSIVO DO ADMIN (Tamanho Máximo e Fontes Grandes)
+    st.markdown("""
+        <style>
+            .block-container {
+                max-width: 1100px !important; 
+                padding-top: 2rem !important;
+            }
+            /* Aumenta a fonte de todas as abas no PC */
+            button[data-baseweb="tab"] p {
+                font-size: 1rem !important;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    agora_br = datetime.utcnow() - timedelta(hours=3)
+    hoje_str = agora_br.strftime("%d/%m/%Y")
 
-
-    # Carrega as bases principais
     df_usuarios = carregar_dados("Usuarios")
     df_logs = carregar_dados("Logs")
 
@@ -837,221 +881,322 @@ elif cargo_limpo == "admin":
         st.error("Falha ao carregar o banco de dados principal.")
         st.stop()
 
-    # 2. ABAS DE GESTÃO (Estilo Adesivo)
-    tab_hierarquia, tab_mensagens, tab_logs, tab_cadastro = st.tabs([
-        "👥 EQUIPES", "📝 MISSÕES", "📊 DASHBOARD", "➕ CADASTRO"
+    # 2. ABAS DE GESTÃO
+    tab_hierarquia, tab_logs, tab_mensagens, tab_cadastro = st.tabs([
+        "👥 EQUIPES", "📊 DASHBOARD","📝 MISSÕES", "➕ CADASTRO"
     ])
 
     # ==========================================
     # ABA 1: ESTRUTURA DE EQUIPES
     # ==========================================
     with tab_hierarquia:
-        st.markdown("<h2 style='font-size: 1.5rem; text-align: left; margin-bottom: 15px;'>ESTRUTURA DE EQUIPES</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='font-family: \"Archivo Black\", sans-serif; color: #1D1D1B; margin-bottom: 25px; font-size: 2rem;'>ESTRUTURA DE EQUIPES</h2>", unsafe_allow_html=True)
         
         supervisores = df_usuarios[df_usuarios['Cargo'].str.lower().str.strip() == "supervisor"]
         
         if supervisores.empty:
-            st.warning("Nenhum supervisor encontrado na base de dados.")
+            st.warning("Nenhum supervisor encontrado.")
         else:
-            for _, sup in supervisores.iterrows():
-                equipe = df_usuarios[df_usuarios['ID_Supervisor'].astype(str).str.strip() == str(sup['ID_Usuario']).strip()]
-                qtd_equipe = len(equipe)
+            col_sup1, col_sup2 = st.columns(2, gap="large")
+            
+            for i, (_, sup) in enumerate(supervisores.iterrows()):
+                col_alvo = col_sup1 if i % 2 == 0 else col_sup2
                 
-                # Card do Supervisor
-                st.markdown(f"""
-                    <div style="background-color: #FFFFFF; border: 3px solid #1D1D1B; padding: 12px; margin-bottom: 5px; box-shadow: 4px 4px 0px #1D1D1B; display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <h3 style="margin: 0; font-size: 1.1rem; color: #E20613; text-align: left;">{sup['Nome'].upper()}</h3>
-                            <span style="font-size: 0.75rem; color: #666; font-weight: bold;">GRUPO: {sup['ID_Grupo']} | VOLUNTÁRIOS: {qtd_equipe}</span>
-                        </div>
-                    </div>
-                """, unsafe_allow_html=True)
-                
-                # Expander nativo com os voluntários
-                with st.expander(f"VER EQUIPE DE {sup['Nome'].split()[0].upper()}"):
-                    # Botão de contato com o supervisor
-                    w_sup = sanitize_whatsapp(sup['WhatsApp'])
-                    st.link_button(f"💬 FALAR COM SUPERVISOR", f"https://wa.me/{w_sup}", use_container_width=True)
-                    st.divider()
-                    
-                    if not equipe.empty:
-                        for _, vol in equipe.iterrows():
-                            # Lista simples e limpa
-                            st.markdown(f"<div style='border-bottom: 1px solid #ddd; padding: 5px 0; font-size: 0.85rem;'><b>🚩 {vol['Nome'].upper()}</b><br><span style='color:#666;'>ID: {vol['ID_Usuario']}</span></div>", unsafe_allow_html=True)
-                    else:
-                        st.caption("Nenhum voluntário vinculado.")
-                
-                st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
+                with col_alvo:
+                    equipe = df_usuarios[df_usuarios['ID_Supervisor'].astype(str).str.strip() == str(sup['ID_Usuario']).strip()]
+                    qtd_equipe = len(equipe)
+                    logs_eq = df_logs[(df_logs['ID_Usuario'].isin(equipe['ID_Usuario'])) & (df_logs['Data_Hora'].str.contains(hoje_str))]
+                    ativos_hoje = logs_eq[logs_eq['Tipo_Acao'].str.contains("Check-in")]['ID_Usuario'].nunique()
+                    cor_ativos = "#E20613" if ativos_hoje > 0 else "#666666"
 
+                    # CARD DO SUPERVISOR (Construção contínua para não vazar código)
+                    card_html = ""
+                    card_html += "<div style='background-color: #FFFFFF; border: 4px solid #1D1D1B; box-shadow: 6px 6px 0px #1D1D1B; padding: 20px; margin-bottom: 12px;'>"
+                    card_html += "<div style='border-bottom: 3px solid #1D1D1B; padding-bottom: 12px; margin-bottom: 20px;'>"
+                    card_html += f"<h3 style='margin: 0; font-family: \"Archivo Black\", sans-serif; font-size: 1.5rem; color: #E20613; text-transform: uppercase;'>{sup['Nome']}</h3>"
+                    card_html += f"<span style='background-color: #FFEB00; border: 2px solid #1D1D1B; padding: 4px 10px; font-family: \"Archivo Black\", sans-serif; font-size: 0.8rem; color: #1D1D1B;'>GRUPO: {sup['ID_Grupo']}</span>"
+                    card_html += "</div>"
+                    card_html += "<div style='display: flex; gap: 15px;'>"
+                    card_html += "<div style='flex: 1; background-color: #F4F4F4; border: 2px solid #1D1D1B; padding: 12px; text-align: center;'>"
+                    card_html += "<div style='font-family: \"Archivo Black\", sans-serif; font-size: 0.85rem; color: #666;'>EQUIPE</div>"
+                    card_html += f"<div style='font-family: \"Archivo Black\", sans-serif; font-size: 2.2rem; color: #1D1D1B; line-height: 1; margin-top: 5px;'>{qtd_equipe}</div>"
+                    card_html += "</div>"
+                    card_html += "<div style='flex: 1; background-color: #F4F4F4; border: 2px solid #1D1D1B; padding: 12px; text-align: center;'>"
+                    card_html += "<div style='font-family: \"Archivo Black\", sans-serif; font-size: 0.85rem; color: #666;'>ATIVOS</div>"
+                    card_html += f"<div style='font-family: \"Archivo Black\", sans-serif; font-size: 2.2rem; color: {cor_ativos}; line-height: 1; margin-top: 5px;'>{ativos_hoje}</div>"
+                    card_html += "</div>"
+                    card_html += "</div>"
+                    card_html += "</div>"
+                    
+                    st.markdown(card_html, unsafe_allow_html=True)
+                    
+                    # Botão de Chat
+                    w_sup = sanitize_whatsapp(sup['WhatsApp'])
+                    st.link_button(f"💬 CHAT: {sup['Nome'].split()[0].upper()}", f"https://wa.me/{w_sup}", use_container_width=True)
+                    
+                    with st.expander(f"👥 LISTA DE VOLUNTÁRIOS"):
+                        if not equipe.empty:
+                            lista_html = "<div style='display: flex; flex-direction: column; gap: 10px;'>"
+                            for _, vol in equipe.iterrows():
+                                tem_log = not logs_eq[logs_eq['ID_Usuario'] == vol['ID_Usuario']].empty
+                                status_ico = "🟢" if tem_log else "⚪"
+                                w_vol = sanitize_whatsapp(vol['WhatsApp'])
+                                lista_html += f"<div style='display: flex; justify-content: space-between; align-items: center; background-color: #F4F4F4; border: 2px solid #1D1D1B; padding: 12px;'>"
+                                lista_html += f"<div style='line-height: 1.3;'><span style='font-family: \"Archivo Black\", sans-serif; font-size: 1rem; color: #1D1D1B;'>{status_ico} {vol['Nome'].upper()}</span><br><span style='font-size: 0.8rem; color: #666; font-weight: bold;'>ID: {vol['ID_Usuario']}</span></div>"
+                                lista_html += f"<a href='https://wa.me/{w_vol}' target='_blank' style='background-color: #25D366; color: #FFFFFF; font-family: \"Archivo Black\", sans-serif; font-size: 0.8rem; padding: 8px 15px; border: 2px solid #1D1D1B; box-shadow: 2px 2px 0px #1D1D1B; text-decoration: none; text-transform: uppercase; white-space: nowrap;'>CHAMAR</a>"
+                                lista_html += "</div>"
+                            lista_html += "</div>"
+                            st.markdown(lista_html, unsafe_allow_html=True)
 
     # ==========================================
     # ABA 2: MENSAGENS E MISSÕES
     # ==========================================
     with tab_mensagens:
-        st.markdown("<h2 style='font-size: 1.5rem; text-align: left; margin-bottom: 15px;'>DIRETRIZES DO DIA</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='font-family: \"Archivo Black\", sans-serif; color: #1D1D1B; margin-bottom: 25px; font-size: 2rem;'>DIRETRIZES DO DIA</h2>", unsafe_allow_html=True)
+        
+        st.markdown("""
+            <style>
+                div[data-testid="stForm"] label p { font-size: 1.6rem !important; font-family: 'Archivo Black' !important; font-style: italic; }
+                div[data-testid="stForm"] textarea, div[data-testid="stForm"] input { font-size: 1.4rem !important; font-weight: bold !important; border: 3px solid #1D1D1B !important; }
+            </style>
+        """, unsafe_allow_html=True)
         
         try:
             client = _get_gspread_client()
-            if client is None: raise RuntimeError("GSpread indisponível")
-            
-            planilha = client.open_by_key(st.secrets["planilha"]["id"])
-            aba_msg = planilha.worksheet("Mensagens")
+            aba_msg = client.open_by_key(st.secrets["planilha"]["id"]).worksheet("Mensagens")
             df_msg = pd.DataFrame(aba_msg.get_all_records())
 
-            lista_alvos = df_msg["ID_Alvo"].unique().tolist()
-            alvo_selecionado = st.selectbox("SELECIONE O GRUPO ALVO:", ["Novo..."] + lista_alvos)
+            alvo_selecionado = st.selectbox("1. SELECIONE O GRUPO:", ["Novo..."] + df_msg["ID_Alvo"].unique().tolist())
 
-            with st.container(border=True): # Aplica a sombra/borda do CSS Global
-                with st.form("form_admin_msg"):
-                    st.markdown("<h3 style='font-size: 1.1rem; text-align: center; color: #E20613;'>EDITAR MISSÃO</h3>", unsafe_allow_html=True)
-                    
-                    if alvo_selecionado == "Novo...":
-                        id_alvo, msg_i, tar, dat = "", "", "", ""
-                    else:
-                        d = df_msg[df_msg["ID_Alvo"] == alvo_selecionado].iloc[-1]
-                        id_alvo = d.get("ID_Alvo", "")
-                        msg_i = d.get("Mensagem_Inicial", "")
-                        tar = d.get("Tarefa_Direcionada", "")
-                        dat = d.get("Data_Referencia", "")
+            with st.form("form_admin_msg"):
+                if alvo_selecionado == "Novo...": id_alvo, msg_i, tar = "", "", ""
+                else:
+                    d = df_msg[df_msg["ID_Alvo"] == alvo_selecionado].iloc[-1]
+                    id_alvo, msg_i, tar = d.get("ID_Alvo", ""), d.get("Mensagem_Inicial", ""), d.get("Tarefa_Direcionada", "")
 
-                    f_id = st.text_input("ID do Grupo Alvo (Ex: ZONA_NORTE):", value=id_alvo)
-                    f_dat = st.text_input("Data de Referência (Ex: 24/03/2026):", value=dat)
-                    f_msg = st.text_area("Mensagem do Dia (Aviso Geral):", value=msg_i, height=100)
-                    f_tar = st.text_area("Missão Prioritária de Rua (Tarefa Principal):", value=tar, height=100)
+                f_id = st.text_input("ID DO GRUPO (EX: ZONA_SUL):", value=id_alvo)
+                f_msg = st.text_area("MENSAGEM NO POP-UP DO VOLUNTÁRIO:", value=msg_i, height=200)
+                f_tar = st.text_area("MISSÃO PRIORITÁRIA DE RUA:", value=tar, height=120)
 
-                    # As colunas de Sugestão 1 e 2 foram deixadas em branco pois agora são fixas no código
-                    st.info("💡 As ações de Instagram e WhatsApp agora são fixas no aplicativo dos voluntários para facilitar a usabilidade.")
-
-                    if st.form_submit_button("🚀 SALVAR DIRETRIZES"):
-                        nova_linha = [f_id, f_msg, "", "", f_tar, f_dat] # Deixamos as sugestões vazias
-
-                        if alvo_selecionado != "Novo...":
-                            try:
-                                cell = aba_msg.find(str(alvo_selecionado))
-                                if cell: aba_msg.delete_rows(cell.row)
-                            except: pass
-
-                        aba_msg.append_row(nova_linha)
-                        st.success("✅ MISSÃO ATUALIZADA NO SISTEMA!")
-                        st.cache_data.clear()
+                if st.form_submit_button("🚀 PUBLICAR PARA A EQUIPE", type="primary", use_container_width=True):
+                    data_auto = (datetime.utcnow() - timedelta(hours=3)).strftime("%d/%m/%Y")
+                    if alvo_selecionado != "Novo...":
+                        try:
+                            cell = aba_msg.find(str(alvo_selecionado))
+                            if cell: aba_msg.delete_rows(cell.row)
+                        except: pass
+                    aba_msg.append_row([f_id, f_msg, "", "", f_tar, data_auto])
+                    st.success("✅ MISSÃO PUBLICADA!")
+                    st.cache_data.clear()
+                    time.sleep(1)
+                    st.rerun()
         except Exception as e:
-            st.error(f"Erro ao conectar com a planilha: {e}")
+            st.error(f"Erro na conexão: {e}")
 
-
-    # ==========================================
-    # ABA 3: DASHBOARD GERAL
+# ==========================================
+    # ABA 3: DASHBOARD GERAL (COM ENDEREÇOS E FILTROS)
     # ==========================================
     with tab_logs:
-        st.markdown("<h2 style='font-size: 1.5rem; text-align: left; margin-bottom: 5px;'>MONITORAMENTO GLOBAL</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='font-family: \"Archivo Black\", sans-serif; color: #1D1D1B; margin-bottom: 25px; font-size: 2rem;'>MONITORAMENTO GLOBAL</h2>", unsafe_allow_html=True)
         
-        # Tratamento de Dados
+        # 1. TRATAMENTO DE DADOS E EXTRAÇÃO DE DATAS
+        # Garantir que as colunas existam para não quebrar o código
+        if 'Localização' not in df_logs.columns: df_logs['Localização'] = "Não informada"
+        if 'Endereço' not in df_logs.columns: df_logs['Endereço'] = "Log antigo/Sem GPS"
+
         df_logs['Data_Hora_DT'] = pd.to_datetime(df_logs['Data_Hora'], dayfirst=True, errors='coerce')
+        # Extrai apenas a data (DD/MM/YYYY) para o seletor
+        df_logs['Data_Filtro'] = df_logs['Data_Hora'].str.split().str[0]
+        
+        # Lista de datas para o selectbox (da mais recente para a mais antiga)
+        datas_disponiveis = sorted(
+            [d for d in df_logs['Data_Filtro'].unique().tolist() if isinstance(d, str) and "/" in d], 
+            key=lambda x: datetime.strptime(x, "%d/%m/%Y"), 
+            reverse=True
+        )
+        
+        # 2. SELETOR DE PERÍODO
+        c_filtro, _ = st.columns([1, 2])
+        with c_filtro:
+            opcoes_periodo = ["Histórico Completo"] + datas_disponiveis
+            periodo_selecionado = st.selectbox("📅 SELECIONE O DIA PARA ANÁLISE:", opcoes_periodo)
+        
+        # Merge para pegar os nomes dos usuários
         df_completo = pd.merge(df_logs, df_usuarios[['ID_Usuario', 'Nome']], on='ID_Usuario', how='left')
         df_completo['Nome'] = df_completo['Nome'].fillna(df_completo['ID_Usuario'])
-
-        hoje_str = agora.strftime("%d/%m/%Y")
         
-        # Botões de Filtro estáticos (Mais estáveis que radio no mobile)
-        filtro_tipo = st.selectbox("PERÍODO DE ANÁLISE:", ["Hoje", "Histórico Completo"])
-        
-        if filtro_tipo == "Hoje":
-            df_filtrado = df_completo[df_completo['Data_Hora'].astype(str).str.contains(hoje_str)].copy()
+        # Aplicação do Filtro
+        if periodo_selecionado == "Histórico Completo":
+            df_f = df_completo.copy()
+            texto_label = "TOTAL"
         else:
-            df_filtrado = df_completo.copy()
+            df_f = df_completo[df_completo['Data_Filtro'] == periodo_selecionado].copy()
+            texto_label = periodo_selecionado[:5]
 
-        # Métricas Globais (Cards Neo-Brutalistas)
-        total_acoes = len(df_filtrado)
-        pessoas_ativas = df_filtrado['ID_Usuario'].nunique()
-        checkins = len(df_filtrado[df_filtrado['Tipo_Acao'].str.contains("Check-in")])
-
+        # 3. CARDS DE IMPACTO (BRUTALISTAS)
+        total_acoes = len(df_f)
+        ativos_unicos = df_f['ID_Usuario'].nunique()
+        
         st.markdown(f"""
-            <div style="display: flex; justify-content: space-between; gap: 8px; width: 100%; margin-top: 15px; margin-bottom: 20px;">
-                <div style="flex: 1; background-color: #FFFFFF; border: 3px solid #1D1D1B; box-shadow: 4px 4px 0px #1D1D1B; text-align: center; padding: 10px 2px;">
-                    <p style="margin: 0; font-size: 0.65rem; font-family: 'Archivo Black'; color: #666;">AÇÕES</p>
-                    <p style="margin: 0; font-size: 1.6rem; font-family: 'Archivo Black'; color: #1D1D1B; line-height: 1;">{total_acoes}</p>
+            <div style="display: flex; gap: 20px; margin-bottom: 30px;">
+                <div style="flex: 1; background: #FFF; border: 4px solid #1D1D1B; padding: 25px; text-align: center; box-shadow: 8px 8px 0px #1D1D1B;">
+                    <div style="font-family: 'Archivo Black', sans-serif; font-size: 1.1rem; color: #666; text-transform: uppercase;">AÇÕES ({texto_label})</div>
+                    <div style="font-family: 'Archivo Black', sans-serif; font-size: 4rem; color: #1D1D1B; line-height: 1; margin-top: 10px;">{total_acoes}</div>
                 </div>
-                <div style="flex: 1; background-color: #FFFFFF; border: 3px solid #1D1D1B; box-shadow: 4px 4px 0px #1D1D1B; text-align: center; padding: 10px 2px;">
-                    <p style="margin: 0; font-size: 0.65rem; font-family: 'Archivo Black'; color: #666;">ATIVOS</p>
-                    <p style="margin: 0; font-size: 1.6rem; font-family: 'Archivo Black'; color: #E20613; line-height: 1;">{pessoas_ativas}</p>
-                </div>
-                <div style="flex: 1; background-color: #FFFFFF; border: 3px solid #1D1D1B; box-shadow: 4px 4px 0px #1D1D1B; text-align: center; padding: 10px 2px;">
-                    <p style="margin: 0; font-size: 0.65rem; font-family: 'Archivo Black'; color: #666;">PRESENÇA</p>
-                    <p style="margin: 0; font-size: 1.6rem; font-family: 'Archivo Black'; color: #1D1D1B; line-height: 1;">{checkins}</p>
+                <div style="flex: 1; background: #FFF; border: 4px solid #1D1D1B; padding: 25px; text-align: center; box-shadow: 8px 8px 0px #1D1D1B;">
+                    <div style="font-family: 'Archivo Black', sans-serif; font-size: 1.1rem; color: #666; text-transform: uppercase;">MEMBROS ATIVOS</div>
+                    <div style="font-family: 'Archivo Black', sans-serif; font-size: 4rem; color: #E20613; line-height: 1; margin-top: 10px;">{ativos_unicos}</div>
                 </div>
             </div>
         """, unsafe_allow_html=True)
 
-        if not df_filtrado.empty:
-            st.markdown("<h3 style='font-size: 1.2rem; text-align: left; margin-top: 20px;'>🚀 RANKING DE ATIVIDADES</h3>", unsafe_allow_html=True)
-            
-            contagem_tipo = df_filtrado['Tipo_Acao'].value_counts().reset_index()
-            contagem_tipo.columns = ['Atividade', 'Qtd']
-            
-            # Ranking com nossa ID Visual (Vermelho e Amarelo)
-            html_ranking = "<div style='display: flex; flex-direction: column; gap: 8px;'>"
-            for _, row in contagem_tipo.iterrows():
-                nome_acao = str(row['Atividade']).split("|")[0].strip().upper()
-                html_ranking += f"""
-                    <div style="background-color: #FFFFFF; padding: 12px; border: 2px solid #1D1D1B; border-left: 8px solid #FFEB00; display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-family: 'Archivo Black', sans-serif; font-size: 0.85rem; color: #1D1D1B;">{nome_acao}</span>
-                        <span style="background-color: #1D1D1B; color: #FFEB00; font-family: 'Archivo Black', sans-serif; padding: 4px 10px; font-size: 0.85rem;">{row['Qtd']}</span>
-                    </div>
-                """
-            html_ranking += "</div>"
-            st.markdown(html_ranking, unsafe_allow_html=True)
+        # 4. TABELA VISUAL DETALHADA (COM ENDEREÇO)
+        st.markdown("<h3 style='font-family: \"Archivo Black\", sans-serif; font-size: 1.4rem; text-align: left;'>📄 REGISTROS DE ATIVIDADE</h3>", unsafe_allow_html=True)
+        
+        # Ordenar e selecionar colunas para exibição na tela
+        df_visual = df_f.sort_values(by="Data_Hora_DT", ascending=False)
+        
+        st.dataframe(
+            df_visual[['Nome', 'Tipo_Acao', 'Data_Hora', 'Endereço']], 
+            column_config={
+                "Nome": "Membro", 
+                "Tipo_Acao": "Ação Realizada", 
+                "Data_Hora": "Horário",
+                "Endereço": "📍 Local (Aprox.)"
+            }, 
+            use_container_width=True, 
+            hide_index=True
+        )
 
-            st.divider()
-
-            # Tabela NATIVA do Streamlit (Muito estável)
-            st.markdown("<h3 style='font-size: 1.2rem; text-align: left;'>📄 ÚLTIMOS REGISTROS (DETALHADO)</h3>", unsafe_allow_html=True)
-            
-            df_display = df_filtrado.sort_values(by="Data_Hora_DT", ascending=False)[['Nome', 'Tipo_Acao', 'Data_Hora']]
-            st.dataframe(
-                df_display,
-                column_config={"Nome": "Membro", "Tipo_Acao": "Ação", "Data_Hora": "Horário"},
-                use_container_width=True, hide_index=True
-            )
-            
-            csv = df_filtrado.to_csv(index=False).encode('utf-8')
-            st.download_button(label="📥 BAIXAR RELATÓRIO COMPLETO (CSV)", data=csv, file_name=f'relatorio_{filtro_tipo.lower()}.csv', mime='text/csv', use_container_width=True, type="primary")
-
-
-    # ==========================================
-    # ABA 4: CADASTRO DE USUÁRIOS
+        # 5. EXPORTAÇÃO PARA EXCEL (.XLSX)
+        if not df_f.empty:
+            try:
+                # Prepara o DF para exportação com todas as colunas úteis
+                df_excel = df_visual[['Nome', 'Tipo_Acao', 'Data_Hora', 'Localização', 'Endereço']].copy()
+                
+                buffer = io.BytesIO()
+                with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                    df_excel.to_excel(writer, index=False, sheet_name='Relatorio_Comando')
+                    
+                    # Ajuste automático de colunas no Excel
+                    worksheet = writer.sheets['Relatorio_Comando']
+                    for idx, col in enumerate(df_excel.columns):
+                        max_len = max(df_excel[col].astype(str).map(len).max(), len(col)) + 2
+                        worksheet.set_column(idx, idx, max_len)
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                nome_arq = f"relatorio_comando_{periodo_selecionado.replace('/', '-')}.xlsx"
+                
+                st.download_button(
+                    label=f"📊 BAIXAR RELATÓRIO ({periodo_selecionado}) EM EXCEL",
+                    data=buffer.getvalue(),
+                    file_name=nome_arq,
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    use_container_width=True,
+                    type="primary" # Botão Vermelho de Impacto
+                )
+            except Exception as e:
+                st.error(f"Erro ao gerar o arquivo Excel: {e}")
+# ==========================================
+    # ABA 4: GESTÃO DE ACESSOS E GRUPOS
     # ==========================================
     with tab_cadastro:
-        st.markdown("<h2 style='font-size: 1.5rem; text-align: left; margin-bottom: 15px;'>👤 NOVO INTEGRANTE</h2>", unsafe_allow_html=True)
+        # 1. Carregamos as listas atualizadas
+        df_usuarios = carregar_dados("Usuarios")
+        df_grupos_master = carregar_dados("Grupos") # Nova aba
         
-        if df_usuarios is not None:
+        if df_usuarios is not None and df_grupos_master is not None:
             lista_supervisores = df_usuarios[df_usuarios['Cargo'].str.lower().str.strip() == "supervisor"]['ID_Usuario'].unique().tolist()
-            lista_grupos = sorted(df_usuarios['ID_Grupo'].unique().tolist())
+            lista_grupos = sorted(df_grupos_master['ID_Grupo'].unique().tolist())
             
-            with st.container(border=True):
-                with st.form("form_novo_usuario", clear_on_submit=True):
-                    
-                    novo_id = st.text_input("ID DE ACESSO (E-mail):", placeholder="exemplo@email.com").strip().lower()
-                    novo_nome = st.text_input("NOME COMPLETO:")
-                    novo_whats = st.text_input("WHATSAPP (Com DDD):", placeholder="61988887777")
-                    
-                    novo_cargo = st.selectbox("CARGO DO SISTEMA:",["Voluntario", "Supervisor", "Admin"])
-                    novo_grupo = st.selectbox("GRUPO DE ATUAÇÃO (ID):", options=lista_grupos)
-                    novo_sup_selecionado = st.selectbox("SUPERVISOR RESPONSÁVEL:", options=["Nenhum"] + lista_supervisores)
+# --- SEÇÃO 1: NOVO INTEGRANTE ---
+            st.markdown("<h2 style='font-family: \"Archivo Black\", sans-serif; color: #1D1D1B; margin-bottom: 20px; font-size: 1.8rem;'>👤 NOVO INTEGRANTE</h2>", unsafe_allow_html=True)
+            
+            # Criamos um mapeamento: "NOME (ID)" -> "ID"
+            df_sup_only = df_usuarios[df_usuarios['Cargo'].str.lower().str.strip() == "supervisor"]
+            
+            # Criamos uma lista formatada para o dropdown e um dicionário para busca
+            # Exemplo: "JOÃO SILVA (joao@email.com)"
+            mapeamento_sup = {
+                f"{row['Nome'].upper()} ({row['ID_Usuario'].lower()})": row['ID_Usuario'] 
+                for _, row in df_sup_only.iterrows()
+            }
+            lista_nomes_exibicao = sorted(mapeamento_sup.keys())
 
-                    if st.form_submit_button("✅ SALVAR NOVO INTEGRANTE"):
-                        if not novo_id or not novo_nome or not novo_whats:
-                            st.error("Preencha ID, Nome e WhatsApp.")
-                        elif novo_cargo == "Voluntario" and novo_sup_selecionado == "Nenhum":
-                            st.error("⚠️ Voluntários precisam ter um Supervisor atribuído.")
-                        else:
+            with st.container(border=True):
+                with st.form("form_novo_user_v2", clear_on_submit=True):
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.markdown("**DADOS PESSOAIS**")
+                        n_id = st.text_input("ID / E-MAIL (LOGIN):").strip().lower()
+                        n_nome = st.text_input("NOME COMPLETO:")
+                        n_whats = st.text_input("WHATSAPP (DDD + NÚMERO):")
+                    with c2:
+                        st.markdown("**VÍNCULO NO COMANDO**")
+                        n_cargo = st.selectbox("CARGO:", ["Voluntario", "Supervisor", "Admin"])
+                        n_grupo = st.selectbox("GRUPO / TERRITÓRIO:", options=lista_grupos)
+                        
+                        # O dropdown agora mostra os nomes formatados
+                        n_sup_selecionado_display = st.selectbox(
+                            "SUPERVISOR RESPONSÁVEL:", 
+                            options=["NENHUM / PRÓPRIO SUPERVISOR"] + lista_nomes_exibicao
+                        )
+                    
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.form_submit_button("✅ CADASTRAR INTEGRANTE", type="primary", use_container_width=True):
+                        if n_id and n_nome and n_whats:
                             try:
                                 client = _get_gspread_client()
-                                planilha = client.open_by_key(st.secrets["planilha"]["id"])
-                                aba_users = planilha.worksheet("Usuarios")
+                                aba_u = client.open_by_key(st.secrets["planilha"]["id"]).worksheet("Usuarios")
                                 
-                                valor_sup = novo_sup_selecionado if novo_sup_selecionado != "Nenhum" else ""
-                                aba_users.append_row([novo_id, novo_nome, novo_whats, novo_cargo, novo_grupo, valor_sup])
+                                # Lógica para recuperar o ID real do supervisor selecionado
+                                if n_sup_selecionado_display == "NENHUM / PRÓPRIO SUPERVISOR":
+                                    id_supervisor_final = ""
+                                else:
+                                    id_supervisor_final = mapeamento_sup[n_sup_selecionado_display]
 
-                                st.success("🚀 NOVO INTEGRANTE SALVO COM SUCESSO!")
+                                # Colunas: ID_Usuario | Nome | WhatsApp | Cargo | ID_Grupo | ID_Supervisor
+                                aba_u.append_row([
+                                    n_id, 
+                                    n_nome.upper(), # Salva em maiúsculo para padronizar
+                                    n_whats, 
+                                    n_cargo, 
+                                    n_grupo, 
+                                    id_supervisor_final
+                                ])
+                                
+                                st.success(f"🚀 {n_nome.upper()} CADASTRADO!")
                                 st.cache_data.clear()
-                            except Exception as e:
-                                st.error(f"Erro ao salvar: {e}")
+                                time.sleep(1)
+                                st.rerun()
+                            except Exception as e: st.error(f"Erro: {e}")
+                        else: st.error("⚠️ PREENCHA TODOS OS CAMPOS!")
+
+            # --- SEÇÃO 2: NOVO GRUPO ---
+            st.markdown("<h2 style='font-family: \"Archivo Black\", sans-serif; color: #1D1D1B; margin-bottom: 20px; font-size: 1.8rem;'>🚩 CRIAR NOVO GRUPO</h2>", unsafe_allow_html=True)
+            
+            with st.container(border=True):
+                st.info("💡 Ao criar o grupo aqui, ele ficará disponível para seleção no cadastro de usuários.")
+                with st.form("form_novo_grupo_v2", clear_on_submit=True):
+                    g_nome = st.text_input("NOME DO GRUPO (Ex: CELANDIA_CENTRO):").strip().upper()
+                    
+                    if st.form_submit_button("➕ REGISTRAR GRUPO NO SISTEMA", use_container_width=True):
+                        if g_nome:
+                            try:
+                                client = _get_gspread_client()
+                                plan = client.open_by_key(st.secrets["planilha"]["id"])
+                                
+                                # 1. Adiciona na aba 'Grupos' (para os seletores)
+                                plan.worksheet("Grupos").append_row([g_nome])
+                                
+                                # 2. Cria uma entrada inicial na aba 'Mensagens' (para evitar erros de briefing vazio)
+                                plan.worksheet("Mensagens").append_row([g_nome, "BEM-VINDO!", "", "", "MISSÃO INICIAL", ""])
+                                
+                                st.success(f"✅ GRUPO {g_nome} CRIADO COM SUCESSO!")
+                                st.cache_data.clear()
+                                time.sleep(1)
+                                st.rerun()
+                            except Exception as e: st.error(f"Erro ao criar grupo: {e}")
+                        else: st.error("⚠️ DIGITE UM NOME PARA O GRUPO!")
+        else:
+            st.error("Certifique-se de que as abas 'Usuarios' e 'Grupos' existem na sua planilha.")
