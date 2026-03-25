@@ -9,10 +9,8 @@ secondaryBackgroundColor="#FFEB00"
 textColor="#1D1D1B"
 font="sans serif"
 
-[ui]
-# Esconde o seletor de tema no menu do usuário
-hideSidebarNav = false
-
 [client]
-# Desativa a detecção automática de tema do sistema operacional
+# Esta é a opção correta para versões recentes se quiser esconder a navegação padrão de páginas
+showSidebarNavigation = false
+# Define o modo da barra de ferramentas (minimal remove o menu desnecessário)
 toolbarMode = "minimal"
