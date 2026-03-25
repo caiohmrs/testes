@@ -12,3 +12,5 @@ oauth2client
 streamlit_js_eval
 xlsxwriter
 geopy
+folium
+streamlit_folium
