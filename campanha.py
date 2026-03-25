@@ -435,9 +435,41 @@ def atualizar_contrato_enviado(id_usuario, nome_arquivo, link_drive):
         return False
 
 def sanitize_whatsapp(v: str) -> str:
-    if v is None: return ""
-    return ''.join(filter(str.isdigit, str(v)))
+    """Limpa o número, corrige erro de float (.0) e garante o formato 55 + DDD + 9 + Número"""
+    if v is None or str(v).lower() == "nan" or str(v).strip() == "":
+        return ""
+    
+    # 1. Transforma em string e remove o ".0" que o Excel/Pandas coloca em números
+    s = str(v).strip()
+    if s.endswith(".0"):
+        s = s[:-2]
+    
+    # 2. Mantém apenas os dígitos (remove +, -, espaços e parênteses)
+    nums = "".join(filter(str.isdigit, s))
+    
+    # 3. CORREÇÃO DE ERRO DE FLOAT (O zero extra no final)
+    # Se o número tem 12 dígitos, termina em 0 e NÃO começa com 55, 
+    # é quase certeza que o zero final é o ".0" que virou "0".
+    if len(nums) == 12 and nums.endswith("0") and not nums.startswith("55"):
+        nums = nums[:-1]
 
+    # 4. GARANTIR O 55 (BRASIL) E O 9 (CELULAR)
+    # Se o número tem 11 dígitos (DDD + 9 + 8 dígitos), só adiciona o 55
+    if len(nums) == 11:
+        return "55" + nums
+    
+    # Se o número tem 10 dígitos (DDD + 8 dígitos), falta o 55 e o 9
+    if len(nums) == 10:
+        return "55" + nums[:2] + "9" + nums[2:]
+    
+    # Se o número já começa com 55
+    if nums.startswith("55"):
+        # Se tem 12 dígitos (55 + DDD + 8 dígitos), falta o 9
+        if len(nums) == 12:
+            return "55" + nums[2:4] + "9" + nums[4:]
+        return nums
+
+    return nums
 
 def obter_endereco_simples(coords_str):
     """Converte 'lat, lon' em um endereço curto (Rua ou Bairro)"""
