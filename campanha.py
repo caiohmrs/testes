@@ -7,9 +7,11 @@ import extra_streamlit_components as stx
 from streamlit_js_eval import get_geolocation
 import time
 import urllib.parse
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import xlsxwriter
 from geopy.geocoders import Nominatim
+import folium
+from streamlit_folium import st_folium
 
 # Diferenciando os tipos de credenciais
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
@@ -182,7 +184,8 @@ st.markdown('<meta name="color-scheme" content="light">', unsafe_allow_html=True
 
 #agora
 
-agora = datetime.utcnow() - timedelta(hours=3)
+agora = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=3)
+
 
 # --- FUNÇÕES DE APOIO ---
 
@@ -199,9 +202,9 @@ def modal_checkin(u, agora):
     
     foto_in = st.camera_input("FOTO OBRIGATÓRIA", key="cam_in_dialog")
     
-    if st.button("CONFIRMAR CHECK-IN AGORA", use_container_width=True, type="primary"):
+    if st.button("CONFIRMAR CHECK-IN AGORA", width='stretch', type="primary"):
         if foto_in:
-            agora_real = datetime.utcnow() - timedelta(hours=3)
+            agora_real = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=3)
             gps_in = st.session_state.get('last_coords', "Sem GPS")
             with st.status("🚀 PROCESSANDO REGISTRO...", expanded=True) as status:
                 nome_img = f"checkin_{u['Nome']}_{agora_real.strftime('%d-%m-%Y_%H-%M')}.jpg"
@@ -231,9 +234,9 @@ def modal_checkout(u, agora):
     
     foto_out = st.camera_input("FOTO OBRIGATÓRIA", key="cam_out_dialog")
     
-    if st.button("CONFIRMAR SAÍDA AGORA", use_container_width=True, type="primary"):
+    if st.button("CONFIRMAR SAÍDA AGORA", width='stretch', type="primary"):
         if foto_out:
-            agora_real = datetime.utcnow() - timedelta(hours=3)
+            agora_real = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=3)
             gps_out = st.session_state.get('last_coords', "Sem GPS")
             with st.status("📡 PROCESSANDO SAÍDA...", expanded=True) as status:
                 nome_img = f"checkout_{u['Nome']}_{agora_real.strftime('%d-%m-%Y_%H-%M')}.jpg"
@@ -265,7 +268,7 @@ def modal_mensagem_dia(mensagem):
     """, unsafe_allow_html=True)
     
     # O BOTÃO É O ÚNICO QUE MUDA O ESTADO
-    if st.button("ENTENDIDO / IR PARA MISSÕES", use_container_width=True, type="primary"):
+    if st.button("ENTENDIDO / IR PARA MISSÕES", width='stretch', type="primary"):
         st.session_state["mensagem_exibida"] = True  # <--- MUDANÇA AQUI
         st.rerun()
 
@@ -337,7 +340,7 @@ def registrar_acao(id_usuario, tipo_acao, localizacao="Não informada"):
         planilha_id = st.secrets["planilha"]["id"]
         planilha = client.open_by_key(planilha_id)
         aba = planilha.worksheet("Logs")
-        agora_br = datetime.utcnow() - timedelta(hours=3)
+        agora_br = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=3)
         endereco = "Processando..."
         if "," in localizacao:
             endereco = obter_endereco_simples(localizacao)
@@ -485,7 +488,7 @@ if st.session_state["usuario_logado"] is None:
             # Mas para garantir o visual dentro da caixa, costumamos usar este truque de CSS:
             email_input = st.text_input("ID DE USUÁRIO (E-MAIL)", placeholder="seu@email.com", label_visibility="collapsed")
             
-            if st.button("ENTRAR NO PAINEL", use_container_width=True, type="primary"):
+            if st.button("ENTRAR NO PAINEL", width='stretch', type="primary"):
                 with st.spinner("VALIDANDO..."):
                     df_usuarios = carregar_dados("Usuarios")
                     if df_usuarios is not None:
@@ -514,7 +517,7 @@ with st.sidebar:
     st.write(f"Olá, **{u['Nome'].split()[0]}**")
     st.caption(f"Cargo: {u['Cargo']}")
     
-    if st.button("Sair / Trocar Conta", use_container_width=True):
+    if st.button("Sair / Trocar Conta", width='stretch'):
         # 1. Sinaliza que o logout começou (bloqueia auto-login)
         st.session_state["logout_em_andamento"] = True
         st.session_state["usuario_logado"] = None
@@ -637,10 +640,10 @@ if cargo_limpo in ["voluntario", "voluntário"]:
 
         c1, c2 = st.columns(2)
         with c1:
-            if st.button("🏁 ENTRADA (CHECK-IN)", use_container_width=True, key="btn_modal_in"):
+            if st.button("🏁 ENTRADA (CHECK-IN)", width='stretch', key="btn_modal_in"):
                 modal_checkin(u, agora)
         with c2:
-            if st.button("🏁 SAÍDA (CHECK-OUT)", use_container_width=True, key="btn_modal_out"):
+            if st.button("🏁 SAÍDA (CHECK-OUT)", width='stretch', key="btn_modal_out"):
                 modal_checkout(u, agora)
 
         # --- SEÇÃO DE MISSÕES (FIXAS) ---
@@ -661,7 +664,7 @@ if cargo_limpo in ["voluntario", "voluntário"]:
             st.markdown(f"<h3 style='text-align: center; color: #1D1D1B; margin-bottom: 10px;'>🚩 MISSÃO PRIORITÁRIA</h3>", unsafe_allow_html=True)
             st.markdown(f"<p style='text-align: center; font-weight: bold; font-size: 1.1rem;'>{t_txt}</p>", unsafe_allow_html=True)
             
-            if st.button(f"CONCLUIR MISSÃO DE HOJE", use_container_width=True, key="btn_tarefa_fixa"):
+            if st.button(f"CONCLUIR MISSÃO DE HOJE", width='stretch', key="btn_tarefa_fixa"):
                 registrar_acao(u['ID_Usuario'], f"CONCLUIU: {t_txt}", localizacao=st.session_state.get('last_coords'))
             
                 st.success("MISSÃO REGISTRADA COM SUCESSO!")
@@ -674,7 +677,7 @@ if cargo_limpo in ["voluntario", "voluntário"]:
 
         with col_m1:
             # --- LÓGICA INSTAGRAM ---
-            if st.button("📸 CURTA, COMENTE E COMPARTILHE NOSSO ÚLTIMO POST!", use_container_width=True, key="fixo_insta"):
+            if st.button("📸 CURTA, COMENTE E COMPARTILHE NOSSO ÚLTIMO POST!", width='stretch', key="fixo_insta"):
                 registrar_acao(u['ID_Usuario'], "AÇÃO: INTERAÇÃO INSTAGRAM", localizacao=st.session_state.get('last_coords'))
                 st.markdown(f"""
                     <a href="https://www.instagram.com/maxmacieldf/" target="_blank">
@@ -686,7 +689,7 @@ if cargo_limpo in ["voluntario", "voluntário"]:
 
         with col_m2:
             # --- LÓGICA WHATSAPP ---
-            if st.button("💬 TRAGA UM NOVO AMIGO PARA SER VOLUNTÁRIO!", use_container_width=True, key="fixo_whats"):
+            if st.button("💬 TRAGA UM NOVO AMIGO PARA SER VOLUNTÁRIO!", width='stretch', key="fixo_whats"):
                 # 1. Registra a ação no banco de dados
                 registrar_acao(u['ID_Usuario'], "AÇÃO: TRAZER NOVO VOLUNTÁRIO!", localizacao=st.session_state.get('last_coords'))
                 
@@ -833,10 +836,10 @@ elif cargo_limpo == "supervisor":
                     else: 
                         btn_label, msg = "⚠️ COBRAR", f"Fala, {p_nome}! Tudo certo? Notei que não houve registro de atividades em {data_str[:5]}. Algum imprevisto?"
 
-                    st.link_button(btn_label, f"https://api.whatsapp.com/send?text={urllib.parse.quote(msg)}", use_container_width=True, type="primary")
+                    st.link_button(btn_label, f"https://api.whatsapp.com/send?text={urllib.parse.quote(msg)}", width='stretch', type="primary")
                 
                 with c_wa2:
-                    st.link_button("💬 ABRIR CHAT", f"https://wa.me/{w_limpo}", use_container_width=True)
+                    st.link_button("💬 ABRIR CHAT", f"https://wa.me/{w_limpo}", width='stretch')
 
         # 5. BOTÃO DE ENVIAR RELATÓRIO NO FINAL (Abaixo de todos os box de voluntários)
         st.markdown("<br>", unsafe_allow_html=True)
@@ -849,7 +852,7 @@ elif cargo_limpo == "supervisor":
             f"🎯 Ações Realizadas: {total_acoes}\n\n"
             f"Vamos pra cima! 🚀"
         )
-        st.link_button("📲 ENVIAR RELATÓRIO P/ COORDENAÇÃO", f"https://api.whatsapp.com/send?text={urllib.parse.quote(relatorio_msg)}", use_container_width=True, type="primary")
+        st.link_button("📲 ENVIAR RELATÓRIO P/ COORDENAÇÃO", f"https://api.whatsapp.com/send?text={urllib.parse.quote(relatorio_msg)}", width='stretch', type="primary")
         st.markdown("<br><br>", unsafe_allow_html=True)
 
 
@@ -871,7 +874,7 @@ elif cargo_limpo == "admin":
         </style>
     """, unsafe_allow_html=True)
     
-    agora_br = datetime.utcnow() - timedelta(hours=3)
+    agora_br = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=3)
     hoje_str = agora_br.strftime("%d/%m/%Y")
 
     df_usuarios = carregar_dados("Usuarios")
@@ -882,8 +885,8 @@ elif cargo_limpo == "admin":
         st.stop()
 
     # 2. ABAS DE GESTÃO
-    tab_hierarquia, tab_logs, tab_mensagens, tab_cadastro = st.tabs([
-        "👥 EQUIPES", "📊 DASHBOARD","📝 MISSÕES", "➕ CADASTRO"
+    tab_hierarquia, tab_logs, tab_mapa, tab_mensagens, tab_cadastro = st.tabs([
+        "👥 EQUIPES", "📊 DASHBOARD", "🗺️ MAPA", "📝 MISSÕES", "➕ CADASTRO"
     ])
 
     # ==========================================
@@ -932,7 +935,7 @@ elif cargo_limpo == "admin":
                     
                     # Botão de Chat
                     w_sup = sanitize_whatsapp(sup['WhatsApp'])
-                    st.link_button(f"💬 CHAT: {sup['Nome'].split()[0].upper()}", f"https://wa.me/{w_sup}", use_container_width=True)
+                    st.link_button(f"💬 CHAT: {sup['Nome'].split()[0].upper()}", f"https://wa.me/{w_sup}", width='stretch')
                     
                     with st.expander(f"👥 LISTA DE VOLUNTÁRIOS"):
                         if not equipe.empty:
@@ -978,7 +981,7 @@ elif cargo_limpo == "admin":
                 f_msg = st.text_area("MENSAGEM NO POP-UP DO VOLUNTÁRIO:", value=msg_i, height=200)
                 f_tar = st.text_area("MISSÃO PRIORITÁRIA DE RUA:", value=tar, height=120)
 
-                if st.form_submit_button("🚀 PUBLICAR PARA A EQUIPE", type="primary", use_container_width=True):
+                if st.form_submit_button("🚀 PUBLICAR PARA A EQUIPE", type="primary", width='stretch'):
                     data_auto = (datetime.utcnow() - timedelta(hours=3)).strftime("%d/%m/%Y")
                     if alvo_selecionado != "Novo...":
                         try:
@@ -1064,7 +1067,7 @@ elif cargo_limpo == "admin":
                 "Data_Hora": "Horário",
                 "Endereço": "📍 Local (Aprox.)"
             }, 
-            use_container_width=True, 
+            width='stretch', 
             hide_index=True
         )
 
@@ -1092,7 +1095,7 @@ elif cargo_limpo == "admin":
                     data=buffer.getvalue(),
                     file_name=nome_arq,
                     mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                    use_container_width=True,
+                    width='stretch',
                     type="primary" # Botão Vermelho de Impacto
                 )
             except Exception as e:
@@ -1143,7 +1146,7 @@ elif cargo_limpo == "admin":
                         )
                     
                     st.markdown("<br>", unsafe_allow_html=True)
-                    if st.form_submit_button("✅ CADASTRAR INTEGRANTE", type="primary", use_container_width=True):
+                    if st.form_submit_button("✅ CADASTRAR INTEGRANTE", type="primary", width='stretch'):
                         if n_id and n_nome and n_whats:
                             try:
                                 client = _get_gspread_client()
@@ -1180,7 +1183,7 @@ elif cargo_limpo == "admin":
                 with st.form("form_novo_grupo_v2", clear_on_submit=True):
                     g_nome = st.text_input("NOME DO GRUPO (Ex: CELANDIA_CENTRO):").strip().upper()
                     
-                    if st.form_submit_button("➕ REGISTRAR GRUPO NO SISTEMA", use_container_width=True):
+                    if st.form_submit_button("➕ REGISTRAR GRUPO NO SISTEMA", width='stretch'):
                         if g_nome:
                             try:
                                 client = _get_gspread_client()
@@ -1200,3 +1203,81 @@ elif cargo_limpo == "admin":
                         else: st.error("⚠️ DIGITE UM NOME PARA O GRUPO!")
         else:
             st.error("Certifique-se de que as abas 'Usuarios' e 'Grupos' existem na sua planilha.")
+
+# ==========================================
+    # ABA 5: MAPA DE OPERAÇÕES (SELETOR INDEPENDENTE)
+    # ==========================================
+    with tab_mapa:
+        st.markdown("<h2 style='font-family: \"Archivo Black\", sans-serif; color: #1D1D1B; margin-bottom: 25px; font-size: 2rem;'>🗺️ MAPA DE OPERAÇÕES</h2>", unsafe_allow_html=True)
+        
+        import folium
+        from streamlit_folium import st_folium
+        from folium.plugins import MarkerCluster
+
+        # 1. SELETOR DE DATA EXCLUSIVO PARA O MAPA
+        # Extraímos as datas disponíveis nos logs (reutilizando a lógica da aba anterior)
+        df_logs['Data_Filtro'] = df_logs['Data_Hora'].str.split().str[0]
+        datas_mapa = sorted(
+            [d for d in df_logs['Data_Filtro'].unique().tolist() if isinstance(d, str) and "/" in d], 
+            key=lambda x: datetime.strptime(x, "%d/%m/%Y"), 
+            reverse=True
+        )
+
+        c_map_filtro, _ = st.columns([1.5, 2])
+        with c_map_filtro:
+            periodo_mapa = st.selectbox("📍 FILTRAR LOCALIZAÇÕES POR DATA:", ["Histórico Completo"] + datas_mapa, key="filtro_mapa_indep")
+
+        # 2. FILTRAGEM DOS DADOS
+        if periodo_mapa == "Histórico Completo":
+            df_m = df_completo.copy()
+        else:
+            df_m = df_completo[df_completo['Data_Filtro'] == periodo_mapa].copy()
+
+        # 3. TRATAMENTO DE COORDENADAS (LAT/LON)
+        def extrair_lat_lon(pos):
+            try:
+                if pos and "," in str(pos):
+                    lat, lon = str(pos).split(",")
+                    return float(lat), float(lon)
+            except:
+                return None, None
+            return None, None
+
+        df_m['lat'], df_m['lon'] = zip(*df_m['Localização'].apply(extrair_lat_lon))
+        # Removemos logs que não possuem GPS válido
+        df_geo = df_m.dropna(subset=['lat', 'lon'])
+
+        # 4. RENDERIZAÇÃO DO MAPA
+        if not df_geo.empty:
+            # Centraliza o mapa na média dos pontos encontrados
+            m = folium.Map(location=[df_geo['lat'].mean(), df_geo['lon'].mean()], zoom_start=12, tiles="OpenStreetMap")
+            
+            # Cluster para agrupar pontos próximos (melhora visual no PC)
+            marker_cluster = MarkerCluster().add_to(m)
+
+            for _, row in df_geo.iterrows():
+                # Pop-up no estilo da Campanha
+                popup_content = f"""
+                <div style="font-family: sans-serif; min-width: 180px; border: 2px solid #1D1D1B; padding: 10px; background-color: #FFF;">
+                    <b style="color: #E20613; text-transform: uppercase; font-size: 14px;">{row['Nome']}</b><br>
+                    <div style="margin: 5px 0; border-top: 1px solid #000;"></div>
+                    <b>Ação:</b> {str(row['Tipo_Acao']).split('|')[0]}<br>
+                    <b>Hora:</b> {row['Data_Hora'].split()[-1][:5]}<br>
+                    <small style="color: #666;">{row['Endereço']}</small>
+                </div>
+                """
+                
+                folium.Marker(
+                    location=[row['lat'], row['lon']],
+                    popup=folium.Popup(popup_content, max_width=300),
+                    icon=folium.Icon(color="red", icon="info-sign")
+                ).add_to(marker_cluster)
+
+            # Exibe o mapa ocupando a largura disponível
+            st_folium(m, width=1200, height=600, returned_objects=[])
+            
+            st.markdown(f"💡 **Exibindo {len(df_geo)} registros geolocalizados.** Clique nos círculos para expandir as regiões.")
+        else:
+            with st.container(border=True):
+                st.warning(f"⚠️ NENHUM DADO DE GPS ENCONTRADO PARA: {periodo_mapa}")
+                st.info("Somente ações realizadas com GPS ativo no celular aparecem neste mapa.")
