@@ -153,46 +153,36 @@ st.markdown(f"""
             background-color: #FFFFFF !important;
         }}
 
-        /* --- LIMPEZA DE INTERFACE TOTAL (MOBILE & PC) --- */
+        /* --- LIMPEZA DE INTERFACE (MANTENDO O BOTÃO DA SIDEBAR) --- */
         
-        /* 1. Remove o rodapé "Made with Streamlit" ou "Hosted with Streamlit" */
+        /* 1. Remove o rodapé "Made with Streamlit" */
         footer {{
             display: none !important;
             visibility: hidden !important;
         }}
 
         /* 2. Remove a linha colorida no topo */
-        [data-testid="stDecoration"] {{
+        div[data-testid="stDecoration"] {{
             display: none !important;
         }}
 
-        /* 3. Remove os botões de GitHub, Fork e Deploy (Canto superior direito) */
-        /* Mas mantém o cabeçalho transparente para não perder o botão da Sidebar */
-        header[data-testid="stHeader"] {{
-            background-color: rgba(0,0,0,0) !important;
-        }}
-
-        /* Oculta especificamente a barra de ferramentas da direita */
-        .stAppToolbar, .stDeployButton, [data-testid="stHeaderActionElements"] {{
+        /* 3. OCULTA APENAS O LADO DIREITO DO HEADER (GitHub, Fork, Deploy) */
+        /* Isso preserva o lado esquerdo onde fica o botão da Sidebar */
+        [data-testid="stHeaderActionElements"], .stDeployButton {{
             display: none !important;
             visibility: hidden !important;
         }}
 
-        /* 4. Ajuste para o conteúdo não ficar muito colado no topo agora que limpamos tudo */
-        .block-container {{
-            padding-top: 2rem !important;
-            padding-bottom: 1rem !important;
-        }}
+        /* 4. Deixa o fundo do header transparente para não parecer uma barra cinza */
         header[data-testid="stHeader"] {{
             background-color: rgba(0,0,0,0) !important;
+            color: #1D1D1B !important;
         }}
 
+        /* 5. Ajuste de espaço para o conteúdo */
         .block-container {{
             padding-top: 2rem !important;
-
-
         }}
-
         /* Ajuste Mobile */
         @media (max-width: 768px) {{
             button[data-baseweb="tab"] {{
