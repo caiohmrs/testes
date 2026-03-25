@@ -634,6 +634,7 @@ if cargo_limpo in ["voluntario", "voluntário"]:
     
     # 1. CARREGAMENTO PRÉVIO DA MENSAGEM (Para evitar o NameError 'm')
     df_msgs = carregar_dados("Mensagens")
+    df_usuarios = carregar_dados("Usuarios")
     m = None  # Inicializamos m como vazio
     
     if df_msgs is not None:
@@ -770,6 +771,47 @@ if cargo_limpo in ["voluntario", "voluntário"]:
                             if link and atualizar_contrato_enviado(u['ID_Usuario'], doc['Nome_Arquivo'], link):
                                 st.success("Enviado!")
                                 st.rerun()
+
+# --- RODAPÉ DE SUPORTE (FORA DAS ABAS) ---
+    st.markdown("<div style='margin-top: 30px;'></div>", unsafe_allow_html=True)
+    st.divider()
+    st.markdown("<h3 style='font-size: 1.2rem; text-align: left;'>🆘 PRECISA DE AJUDA?</h3>", unsafe_allow_html=True)
+
+    col_sup1, col_sup2 = st.columns(2)
+
+    # Busca o supervisor
+    id_supervisor_dele = str(u.get('ID_Supervisor', '')).strip().lower()
+    
+    # Agora df_usuarios existe!
+    if df_usuarios is not None:
+        dados_supervisor = df_usuarios[df_usuarios['ID_Usuario'].str.lower().str.strip() == id_supervisor_dele]
+    else:
+        dados_supervisor = pd.DataFrame()
+
+    with col_sup1:
+        if not dados_supervisor.empty:
+            whats_sup = sanitize_whatsapp(dados_supervisor.iloc[0]['WhatsApp'])
+            nome_sup = dados_supervisor.iloc[0]['Nome'].split()[0].upper()
+            msg_sup = f"Olá {nome_sup}! Sou voluntário da sua equipe e preciso de ajuda."
+            
+            st.link_button(
+                f"👤 FALAR COM {nome_sup}", 
+                f"https://api.whatsapp.com/send?phone={whats_sup}&text={urllib.parse.quote(msg_sup)}",
+                width='stretch'
+            )
+        else:
+            st.button("👤 SUPERVISOR NÃO ENCONTRADO", disabled=True, width='stretch')
+
+    with col_sup2:
+        whats_tecnico = "5561998788292" # <--- COLOQUE O NÚMERO DE SUPORTE REAL AQUI
+        msg_tecnica = "Olá! Estou tendo dificuldades técnicas com o aplicativo Comando 2026."
+        
+        st.link_button(
+            "🛠️ SUPORTE DO APP", 
+            f"https://api.whatsapp.com/send?phone={whats_tecnico}&text={urllib.parse.quote(msg_tecnica)}",
+            width='stretch'
+        )
+
 
 # --- VISÃO: SUPERVISOR --- 
 elif cargo_limpo == "supervisor":
@@ -1041,123 +1083,123 @@ elif cargo_limpo == "admin":
 # ==========================================
 # ABA 3: DASHBOARD GERAL (VISÃO COORDENAÇÃO)
 # ==========================================
-with tab_logs:
-    st.markdown("<h2 style='font-family: \"Archivo Black\", sans-serif; color: #1D1D1B; margin-bottom: 25px; font-size: 2rem;'>ESTATÍSTICAS DO COMANDO</h2>", unsafe_allow_html=True)
-    
-    # 1. TRATAMENTO DE DADOS
-    if 'Localização' not in df_logs.columns: df_logs['Localização'] = "Sem GPS"
-    if 'Endereço' not in df_logs.columns: df_logs['Endereço'] = "Não identificado"
-    if 'Feedback' not in df_logs.columns: df_logs['Feedback'] = "Nenhum"
-
-    df_logs['Data_Hora_DT'] = pd.to_datetime(df_logs['Data_Hora'], dayfirst=True, errors='coerce')
-    df_logs['Data_Filtro'] = df_logs['Data_Hora'].str.split().str[0]
-    
-    datas_disponiveis = sorted(
-        [d for d in df_logs['Data_Filtro'].unique().tolist() if isinstance(d, str) and "/" in d], 
-        key=lambda x: datetime.strptime(x, "%d/%m/%Y"), 
-        reverse=True
-    )
-
-    # 2. ÁREA DE FILTROS LADO A LADO (PC-FIRST)
-    c_f1, c_f2 = st.columns([1, 1])
-    with c_f1:
-        periodo_selecionado = st.selectbox("📅 FILTRAR POR DATA:", ["Histórico Completo"] + datas_disponiveis)
-    with c_f2:
-        # Sugestão Adicional: Filtro por Supervisor
-        lista_sups = ["TODOS"] + df_usuarios[df_usuarios['Cargo'].str.lower() == "supervisor"]['Nome'].unique().tolist()
-        sup_filtro = st.selectbox("👤 FILTRAR POR SUPERVISOR:", lista_sups)
-
-    # Merge para análise
-    df_completo = pd.merge(df_logs, df_usuarios[['ID_Usuario', 'Nome', 'ID_Supervisor', 'ID_Grupo']], on='ID_Usuario', how='left')
-    df_completo = pd.merge(df_completo, df_usuarios[['ID_Usuario', 'Nome']].rename(columns={'Nome': 'Supervisor_Nome', 'ID_Usuario': 'ID_Supervisor'}), on='ID_Supervisor', how='left')
-    df_completo['Nome'] = df_completo['Nome'].fillna(df_completo['ID_Usuario'])
-
-    # Aplicação dos Filtros
-    df_f = df_completo.copy()
-    if periodo_selecionado != "Histórico Completo":
-        df_f = df_f[df_f['Data_Filtro'] == periodo_selecionado]
-    if sup_filtro != "TODOS":
-        df_f = df_f[df_f['Supervisor_Nome'] == sup_filtro]
-
-    # 3. CARDS DE IMPACTO
-    total_acoes = len(df_f)
-    ativos_unicos = df_f['ID_Usuario'].nunique()
-    checkins_total = len(df_f[df_f['Tipo_Acao'].str.contains("Check-in", case=False)])
-
-    st.markdown(f"""
-<div style="display: flex; gap: 15px; margin-bottom: 30px;">
-    <div style="flex: 1; background: #FFF; border: 4px solid #1D1D1B; padding: 20px; text-align: center; box-shadow: 6px 6px 0px #1D1D1B;">
-        <div style="font-family: 'Archivo Black'; font-size: 0.9rem; color: #666;">AÇÕES NO PERÍODO</div>
-        <div style="font-family: 'Archivo Black'; font-size: 3rem; color: #1D1D1B; line-height: 1; margin-top: 10px;">{total_acoes}</div>
-    </div>
-    <div style="flex: 1; background: #FFF; border: 4px solid #1D1D1B; padding: 20px; text-align: center; box-shadow: 6px 6px 0px #1D1D1B;">
-        <div style="font-family: 'Archivo Black'; font-size: 0.9rem; color: #666;">MEMBROS ATIVOS</div>
-        <div style="font-family: 'Archivo Black'; font-size: 3rem; color: #E20613; line-height: 1; margin-top: 10px;">{ativos_unicos}</div>
-    </div>
-    <div style="flex: 1; background: #FFF; border: 4px solid #1D1D1B; padding: 20px; text-align: center; box-shadow: 6px 6px 0px #1D1D1B;">
-        <div style="font-family: 'Archivo Black'; font-size: 0.9rem; color: #666;">PRESENÇA FÍSICA</div>
-        <div style="font-family: 'Archivo Black'; font-size: 3rem; color: #1D1D1B; line-height: 1; margin-top: 10px;">{checkins_total}</div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-    # 4. RESUMO DE PERFORMANCE POR EQUIPE (Sugestão de "outra coisa")
-    if not df_f.empty:
-        st.markdown("<h3 style='font-family: \"Archivo Black\", sans-serif; font-size: 1.4rem; text-align: left;'>🏆 RANKING POR EQUIPE</h3>", unsafe_allow_html=True)
-        # Agrupamento para ver produtividade por supervisor
-        df_rank = df_f.groupby('Supervisor_Nome').agg({
-            'Tipo_Acao': 'count',
-            'ID_Usuario': 'nunique'
-        }).reset_index().rename(columns={'Supervisor_Nome': 'Supervisor', 'Tipo_Acao': 'Total de Ações', 'ID_Usuario': 'Voluntários na Rua'})
+    with tab_logs:
+        st.markdown("<h2 style='font-family: \"Archivo Black\", sans-serif; color: #1D1D1B; margin-bottom: 25px; font-size: 2rem;'>ESTATÍSTICAS DO COMANDO</h2>", unsafe_allow_html=True)
         
-        st.dataframe(df_rank.sort_values(by='Total de Ações', ascending=False), use_container_width=True, hide_index=True)
+        # 1. TRATAMENTO DE DADOS
+        if 'Localização' not in df_logs.columns: df_logs['Localização'] = "Sem GPS"
+        if 'Endereço' not in df_logs.columns: df_logs['Endereço'] = "Não identificado"
+        if 'Feedback' not in df_logs.columns: df_logs['Feedback'] = "Nenhum"
 
-    st.divider()
+        df_logs['Data_Hora_DT'] = pd.to_datetime(df_logs['Data_Hora'], dayfirst=True, errors='coerce')
+        df_logs['Data_Filtro'] = df_logs['Data_Hora'].str.split().str[0]
+        
+        datas_disponiveis = sorted(
+            [d for d in df_logs['Data_Filtro'].unique().tolist() if isinstance(d, str) and "/" in d], 
+            key=lambda x: datetime.strptime(x, "%d/%m/%Y"), 
+            reverse=True
+        )
 
-    # 5. TABELA DE LOGS COMPLETA (ADICIONADA COLUNA FEEDBACK)
-    st.markdown("<h3 style='font-family: \"Archivo Black\", sans-serif; font-size: 1.4rem; text-align: left;'>📄 DETALHAMENTO DAS MISSÕES</h3>", unsafe_allow_html=True)
-    
-    # Adicionada a coluna Feedback na visualização
-    df_visual = df_f.sort_values(by="Data_Hora_DT", ascending=False)
-    
-    st.dataframe(
-        df_visual[['Nome', 'Tipo_Acao', 'Data_Hora', 'Feedback', 'Endereço']], 
-        column_config={
-            "Nome": "Voluntário", 
-            "Tipo_Acao": "Ação", 
-            "Data_Hora": "Horário",
-            "Feedback": "📣 Relato/Clima",
-            "Endereço": "📍 Local"
-        }, 
-        width='stretch', 
-        hide_index=True
-    )
+        # 2. ÁREA DE FILTROS LADO A LADO (PC-FIRST)
+        c_f1, c_f2 = st.columns([1, 1])
+        with c_f1:
+            periodo_selecionado = st.selectbox("📅 FILTRAR POR DATA:", ["Histórico Completo"] + datas_disponiveis)
+        with c_f2:
+            # Sugestão Adicional: Filtro por Supervisor
+            lista_sups = ["TODOS"] + df_usuarios[df_usuarios['Cargo'].str.lower() == "supervisor"]['Nome'].unique().tolist()
+            sup_filtro = st.selectbox("👤 FILTRAR POR SUPERVISOR:", lista_sups)
 
-    # 6. EXPORTAÇÃO PARA EXCEL (Relatório Gerencial)
-    if not df_f.empty:
-        try:
-            df_excel = df_visual[['Nome', 'Supervisor_Nome', 'ID_Grupo', 'Tipo_Acao', 'Data_Hora', 'Feedback', 'Endereço', 'Localização']].copy()
-            buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                df_excel.to_excel(writer, index=False, sheet_name='Relatorio_Completo')
-                worksheet = writer.sheets['Relatorio_Completo']
-                for idx, col in enumerate(df_excel.columns):
-                    max_len = max(df_excel[col].astype(str).map(len).max(), len(col)) + 2
-                    worksheet.set_column(idx, idx, max_len)
+        # Merge para análise
+        df_completo = pd.merge(df_logs, df_usuarios[['ID_Usuario', 'Nome', 'ID_Supervisor', 'ID_Grupo']], on='ID_Usuario', how='left')
+        df_completo = pd.merge(df_completo, df_usuarios[['ID_Usuario', 'Nome']].rename(columns={'Nome': 'Supervisor_Nome', 'ID_Usuario': 'ID_Supervisor'}), on='ID_Supervisor', how='left')
+        df_completo['Nome'] = df_completo['Nome'].fillna(df_completo['ID_Usuario'])
+
+        # Aplicação dos Filtros
+        df_f = df_completo.copy()
+        if periodo_selecionado != "Histórico Completo":
+            df_f = df_f[df_f['Data_Filtro'] == periodo_selecionado]
+        if sup_filtro != "TODOS":
+            df_f = df_f[df_f['Supervisor_Nome'] == sup_filtro]
+
+        # 3. CARDS DE IMPACTO
+        total_acoes = len(df_f)
+        ativos_unicos = df_f['ID_Usuario'].nunique()
+        checkins_total = len(df_f[df_f['Tipo_Acao'].str.contains("Check-in", case=False)])
+
+        st.markdown(f"""
+    <div style="display: flex; gap: 15px; margin-bottom: 30px;">
+        <div style="flex: 1; background: #FFF; border: 4px solid #1D1D1B; padding: 20px; text-align: center; box-shadow: 6px 6px 0px #1D1D1B;">
+            <div style="font-family: 'Archivo Black'; font-size: 0.9rem; color: #666;">AÇÕES NO PERÍODO</div>
+            <div style="font-family: 'Archivo Black'; font-size: 3rem; color: #1D1D1B; line-height: 1; margin-top: 10px;">{total_acoes}</div>
+        </div>
+        <div style="flex: 1; background: #FFF; border: 4px solid #1D1D1B; padding: 20px; text-align: center; box-shadow: 6px 6px 0px #1D1D1B;">
+            <div style="font-family: 'Archivo Black'; font-size: 0.9rem; color: #666;">MEMBROS ATIVOS</div>
+            <div style="font-family: 'Archivo Black'; font-size: 3rem; color: #E20613; line-height: 1; margin-top: 10px;">{ativos_unicos}</div>
+        </div>
+        <div style="flex: 1; background: #FFF; border: 4px solid #1D1D1B; padding: 20px; text-align: center; box-shadow: 6px 6px 0px #1D1D1B;">
+            <div style="font-family: 'Archivo Black'; font-size: 0.9rem; color: #666;">PRESENÇA FÍSICA</div>
+            <div style="font-family: 'Archivo Black'; font-size: 3rem; color: #1D1D1B; line-height: 1; margin-top: 10px;">{checkins_total}</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+        # 4. RESUMO DE PERFORMANCE POR EQUIPE (Sugestão de "outra coisa")
+        if not df_f.empty:
+            st.markdown("<h3 style='font-family: \"Archivo Black\", sans-serif; font-size: 1.4rem; text-align: left;'>🏆 RANKING POR EQUIPE</h3>", unsafe_allow_html=True)
+            # Agrupamento para ver produtividade por supervisor
+            df_rank = df_f.groupby('Supervisor_Nome').agg({
+                'Tipo_Acao': 'count',
+                'ID_Usuario': 'nunique'
+            }).reset_index().rename(columns={'Supervisor_Nome': 'Supervisor', 'Tipo_Acao': 'Total de Ações', 'ID_Usuario': 'Voluntários na Rua'})
             
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.download_button(
-                label=f"📊 BAIXAR RELATÓRIO COMPLETO EM EXCEL ({periodo_selecionado})",
-                data=buffer.getvalue(),
-                file_name=f'comando2026_relatorio_{sup_filtro}.xlsx',
-                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                width='stretch',
-                type="primary"
-            )
-        except Exception as e:
-            st.error(f"Erro ao gerar Excel: {e}")
+            st.dataframe(df_rank.sort_values(by='Total de Ações', ascending=False), use_container_width=True, hide_index=True)
 
-            
+        st.divider()
+
+        # 5. TABELA DE LOGS COMPLETA (ADICIONADA COLUNA FEEDBACK)
+        st.markdown("<h3 style='font-family: \"Archivo Black\", sans-serif; font-size: 1.4rem; text-align: left;'>📄 DETALHAMENTO DAS MISSÕES</h3>", unsafe_allow_html=True)
+        
+        # Adicionada a coluna Feedback na visualização
+        df_visual = df_f.sort_values(by="Data_Hora_DT", ascending=False)
+        
+        st.dataframe(
+            df_visual[['Nome', 'Tipo_Acao', 'Data_Hora', 'Feedback', 'Endereço']], 
+            column_config={
+                "Nome": "Voluntário", 
+                "Tipo_Acao": "Ação", 
+                "Data_Hora": "Horário",
+                "Feedback": "📣 Relato/Clima",
+                "Endereço": "📍 Local"
+            }, 
+            width='stretch', 
+            hide_index=True
+        )
+
+        # 6. EXPORTAÇÃO PARA EXCEL (Relatório Gerencial)
+        if not df_f.empty:
+            try:
+                df_excel = df_visual[['Nome', 'Supervisor_Nome', 'ID_Grupo', 'Tipo_Acao', 'Data_Hora', 'Feedback', 'Endereço', 'Localização']].copy()
+                buffer = io.BytesIO()
+                with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                    df_excel.to_excel(writer, index=False, sheet_name='Relatorio_Completo')
+                    worksheet = writer.sheets['Relatorio_Completo']
+                    for idx, col in enumerate(df_excel.columns):
+                        max_len = max(df_excel[col].astype(str).map(len).max(), len(col)) + 2
+                        worksheet.set_column(idx, idx, max_len)
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.download_button(
+                    label=f"📊 BAIXAR RELATÓRIO COMPLETO EM EXCEL ({periodo_selecionado})",
+                    data=buffer.getvalue(),
+                    file_name=f'comando2026_relatorio_{sup_filtro}.xlsx',
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    width='stretch',
+                    type="primary"
+                )
+            except Exception as e:
+                st.error(f"Erro ao gerar Excel: {e}")
+
+
 # ==========================================
     # ABA 4: GESTÃO DE ACESSOS E GRUPOS
     # ==========================================
