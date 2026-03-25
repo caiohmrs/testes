@@ -952,19 +952,39 @@ elif cargo_limpo == "supervisor":
                 else:
                     st.info(f"Sem atividades em {data_str[:5]}.")
 
-                # BOTÕES WHATSAPP
+# --- BOTÕES WHATSAPP (CORRIGIDOS PARA ABRIR DIRETO NO VOLUNTÁRIO) ---
                 st.divider()
-                w_limpo = sanitize_whatsapp(vol['WhatsApp'])
+                w_limpo = sanitize_whatsapp(vol['WhatsApp']) # Puxa o número limpo do voluntário
                 p_nome = vol['Nome'].split()[0]
+                
                 c_wa1, c_wa2 = st.columns(2)
+                
                 with c_wa1:
-                    if tem_checkin and tem_missao: b_l, msg = "🚀 PARABÉNS", f"Mandou bem, {p_nome}! Missão completa! 🔥"
-                    elif tem_checkin: b_l, msg = "💪 MOTIVAR", f"Bora, {p_nome}! Vi que está em campo. Pra cima! 🚀"
-                    elif tem_redes: b_l, msg = "⚡ REFORÇAR", f"Boa, {p_nome}! Vi que mobilizou as redes. Não esquece o check-in na rua! 💪"
-                    else: b_l, msg = "⚠️ COBRAR", f"Fala, {p_nome}! Ainda não vi suas atividades hoje. Algum problema?"
-                    st.link_button(b_l, f"https://api.whatsapp.com/send?text={urllib.parse.quote(msg)}", width='stretch', type="primary")
+                    # 1. Define a mensagem e o rótulo baseados no status
+                    if tem_checkin and tem_missao: 
+                        b_l, msg = "🚀 PARABÉNS", f"Mandou bem, {p_nome}! Missão completa! 🔥"
+                    elif tem_checkin: 
+                        b_l, msg = "💪 MOTIVAR", f"Bora, {p_nome}! Vi que está em campo. Pra cima! 🚀"
+                    elif tem_redes: 
+                        b_l, msg = "⚡ REFORÇAR", f"Boa, {p_nome}! Vi que mobilizou as redes. Não esquece o check-in na rua! 💪"
+                    else: 
+                        b_l, msg = "⚠️ COBRAR", f"Fala, {p_nome}! Ainda não vi suas atividades hoje. Algum problema?"
+                    
+                    # LINK ATUALIZADO: Agora inclui o número do voluntário (w_limpo)
+                    st.link_button(
+                        b_l, 
+                        f"https://wa.me/{w_limpo}?text={urllib.parse.quote(msg)}", 
+                        width='stretch', 
+                        type="primary"
+                    )
+                
                 with c_wa2:
-                    st.link_button("💬 CHAT", f"https://wa.me/{w_limpo}", width='stretch')
+                    # LINK ATUALIZADO: Abre o chat direto com o voluntário sem mensagem
+                    st.link_button(
+                        "💬 ABRIR CHAT", 
+                        f"https://wa.me/{w_limpo}", 
+                        width='stretch'
+                    )
 
         # 5. RELATÓRIO FINAL
         st.markdown("<br>", unsafe_allow_html=True)
