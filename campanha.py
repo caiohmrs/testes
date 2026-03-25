@@ -153,11 +153,36 @@ st.markdown(f"""
             background-color: #FFFFFF !important;
         }}
 
-        /* LIMPEZA DE INTERFACE */
-        .stDeployButton, #MainMenu, div[data-testid="stDecoration"], footer {{
+        /* --- LIMPEZA DE INTERFACE TOTAL (MOBILE & PC) --- */
+        
+        /* 1. Remove o rodapé "Made with Streamlit" ou "Hosted with Streamlit" */
+        footer {{
+            display: none !important;
+            visibility: hidden !important;
+        }}
+
+        /* 2. Remove a linha colorida no topo */
+        [data-testid="stDecoration"] {{
             display: none !important;
         }}
 
+        /* 3. Remove os botões de GitHub, Fork e Deploy (Canto superior direito) */
+        /* Mas mantém o cabeçalho transparente para não perder o botão da Sidebar */
+        header[data-testid="stHeader"] {{
+            background-color: rgba(0,0,0,0) !important;
+        }}
+
+        /* Oculta especificamente a barra de ferramentas da direita */
+        .stAppToolbar, .stDeployButton, [data-testid="stHeaderActionElements"] {{
+            display: none !important;
+            visibility: hidden !important;
+        }}
+
+        /* 4. Ajuste para o conteúdo não ficar muito colado no topo agora que limpamos tudo */
+        .block-container {{
+            padding-top: 2rem !important;
+            padding-bottom: 1rem !important;
+        }}
         header[data-testid="stHeader"] {{
             background-color: rgba(0,0,0,0) !important;
         }}
