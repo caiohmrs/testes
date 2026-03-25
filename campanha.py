@@ -248,28 +248,45 @@ def modal_checkout(u, agora):
     """, unsafe_allow_html=True)
     
     foto_out = st.camera_input("FOTO OBRIGATÓRIA", key="cam_out_dialog")
+    st.divider()
     
-    if st.button("CONFIRMAR SAÍDA AGORA", width='stretch', type="primary"):
+    st.markdown("### 📊 RELATO DO DIA")
+    clima = st.select_slider(
+        "COMO FOI O TRABALHO HOJE?",
+        options=["⚠️ DIFÍCIL", "😐 NORMAL", "🔥 EXCELENTE"],
+        value="😐 NORMAL"
+    )
+    obs = st.text_area("OBSERVAÇÕES:", placeholder="Ex: chuva, falta de material...", height=80)
+    
+    if st.button("CONFIRMAR SAÍDA", width='stretch', type="primary"):
         if foto_out:
             agora_real = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=3)
             gps_out = st.session_state.get('last_coords', "Sem GPS")
-            with st.status("📡 PROCESSANDO SAÍDA...", expanded=True) as status:
+            
+            with st.spinner("📡 ENVIANDO DADOS..."):
                 nome_img = f"checkout_{u['Nome']}_{agora_real.strftime('%d-%m-%Y_%H-%M')}.jpg"
-                link = salvar_foto_drive(foto_out, nome_img)
+                link_drive = salvar_foto_drive(foto_out, nome_img)
                 
-                if link:
-                    registrar_acao(u['ID_Usuario'], f"Check-out | Foto: {link}", localizacao=gps_out)
+                if link_drive:
+                    # Texto da ação fica limpo
+                    acao_texto = f"Check-out | Foto: {link_drive}"
+                    
+                    # Feedback consolidado (Clima + Obs) para a nova coluna
+                    feedback_texto = f"{clima} | Obs: {obs if obs else 'Nenhuma'}"
+                    
+                    # Chama a função com o novo parâmetro
+                    registrar_acao(u['ID_Usuario'], acao_texto, localizacao=gps_out, feedback=feedback_texto)
+                    
                     try:
                         if "comando2026_checkin_time" in cookie_manager.get_all():
                             cookie_manager.delete("comando2026_checkin_time")
-                    except Exception:
-                        pass
+                    except: pass
                     
-                    status.update(label="✅ SAÍDA REGISTRADA!", state="complete")
+                    st.success("✅ TUDO SALVO! BOM DESCANSO.")
                     time.sleep(2)
                     st.rerun()
         else:
-            st.error("⚠️ VOCÊ PRECISA TIRAR A FOTO!")
+            st.error("⚠️ VOCÊ PRECISA TIRAR A FOTO PARA ENCERRAR!")
 
 @st.dialog("COMANDO 2026: INFORME")
 def modal_mensagem_dia(mensagem):
@@ -348,7 +365,7 @@ def salvar_foto_drive(foto_arquivo, nome_arquivo):
         st.error(f"Erro no Drive: {e}")
         return None
 
-def registrar_acao(id_usuario, tipo_acao, localizacao="Não informada"):
+def registrar_acao(id_usuario, tipo_acao, localizacao="Não informada", feedback=""):
     try:
         client = _get_gspread_client()
         if client is None: return
@@ -368,7 +385,8 @@ def registrar_acao(id_usuario, tipo_acao, localizacao="Não informada"):
             str(tipo_acao),
             agora_br.strftime("%d/%m/%Y %H:%M:%S"),
             str(localizacao),
-            str(endereco)
+            str(endereco),
+            str(feedback)
         ])
         st.toast(f"✅ Log: {tipo_acao}")
     except Exception as e:
@@ -762,54 +780,54 @@ elif cargo_limpo == "supervisor":
     if df_usuarios is not None and df_logs is not None:
         minha_equipe = df_usuarios[df_usuarios['ID_Supervisor'].astype(str) == str(u['ID_Usuario'])]
 
-        # 1. CRIAMOS UM ESPAÇO EM BRANCO NO TOPO PARA AS MÉTRICAS
+        # 1. MÉTRICAS NO TOPO
         espaco_metricas = st.empty()
 
-        # 2. SELETOR DE DATA (Agora aparece entre as Métricas e o Status)
+        # 2. SELETOR DE DATA
         st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
-        c_data, c_vazio = st.columns([1.5, 1])
+        c_data, _ = st.columns([1.5, 1])
         with c_data:
-            data_selecionada = st.date_input("📅 SELECIONE A DATA", datetime.now())
+            data_selecionada = st.date_input("📅 SELECIONE A DATA", datetime.now(timezone.utc) - timedelta(hours=3))
         
         data_str = data_selecionada.strftime("%d/%m/%Y")
 
-        # --- CÁLCULOS BASEADOS NA DATA SELECIONADA ---
+        # Cálculos de hoje/data selecionada
         logs_dia = df_logs[df_logs['Data_Hora'].str.contains(data_str)]
         ativos_dia = logs_dia[logs_dia['ID_Usuario'].isin(minha_equipe['ID_Usuario'])]
-        
         total_vol = len(minha_equipe)
         num_ativos = ativos_dia[ativos_dia['Tipo_Acao'].str.contains("Check-in")]['ID_Usuario'].nunique()
         total_acoes = len(ativos_dia)
 
-        # 3. PREENCHEMOS O ESPAÇO DO TOPO COM AS MÉTRICAS CALCULADAS
+        # Preenchimento das métricas com a ID Visual
         espaco_metricas.markdown(f"""
-            <div style="display: flex; justify-content: space-between; gap: 5px; width: 100%; margin-top: 15px; margin-bottom: 5px;">
-                <div style="flex: 1; background-color: #FFFFFF; border: 2px solid #1D1D1B; box-shadow: 3px 3px 0px #1D1D1B; text-align: center; padding: 5px 2px;">
-                    <p style="margin: 0; font-size: 0.6rem; font-family: 'Archivo Black'; color: #666; white-space: nowrap;">EQUIPE</p>
-                    <p style="margin: 0; font-size: 1.2rem; font-family: 'Archivo Black'; color: #1D1D1B; line-height: 1;">{total_vol}</p>
-                </div>
-                <div style="flex: 1; background-color: #FFFFFF; border: 2px solid #1D1D1B; box-shadow: 3px 3px 0px #1D1D1B; text-align: center; padding: 5px 2px;">
-                    <p style="margin: 0; font-size: 0.6rem; font-family: 'Archivo Black'; color: #666; white-space: nowrap;">ATIVOS</p>
-                    <p style="margin: 0; font-size: 1.2rem; font-family: 'Archivo Black'; color: #E20613; line-height: 1;">{num_ativos}</p>
-                </div>
-                <div style="flex: 1; background-color: #FFFFFF; border: 2px solid #1D1D1B; box-shadow: 3px 3px 0px #1D1D1B; text-align: center; padding: 5px 2px;">
-                    <p style="margin: 0; font-size: 0.6rem; font-family: 'Archivo Black'; color: #666; white-space: nowrap;">AÇÕES</p>
-                    <p style="margin: 0; font-size: 1.2rem; font-family: 'Archivo Black'; color: #1D1D1B; line-height: 1;">{total_acoes}</p>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
+<div style="display: flex; justify-content: space-between; gap: 5px; width: 100%; margin-top: 15px; margin-bottom: 5px;">
+<div style="flex: 1; background-color: #FFFFFF; border: 2px solid #1D1D1B; box-shadow: 3px 3px 0px #1D1D1B; text-align: center; padding: 5px 2px;">
+<p style="margin: 0; font-size: 0.6rem; font-family: 'Archivo Black'; color: #666; white-space: nowrap;">EQUIPE</p>
+<p style="margin: 0; font-size: 1.2rem; font-family: 'Archivo Black'; color: #1D1D1B; line-height: 1;">{total_vol}</p>
+</div>
+<div style="flex: 1; background-color: #FFFFFF; border: 2px solid #1D1D1B; box-shadow: 3px 3px 0px #1D1D1B; text-align: center; padding: 5px 2px;">
+<p style="margin: 0; font-size: 0.6rem; font-family: 'Archivo Black'; color: #666; white-space: nowrap;">ATIVOS</p>
+<p style="margin: 0; font-size: 1.2rem; font-family: 'Archivo Black'; color: #E20613; line-height: 1;">{num_ativos}</p>
+</div>
+<div style="flex: 1; background-color: #FFFFFF; border: 2px solid #1D1D1B; box-shadow: 3px 3px 0px #1D1D1B; text-align: center; padding: 5px 2px;">
+<p style="margin: 0; font-size: 0.6rem; font-family: 'Archivo Black'; color: #666; white-space: nowrap;">AÇÕES</p>
+<p style="margin: 0; font-size: 1.2rem; font-family: 'Archivo Black'; color: #1D1D1B; line-height: 1;">{total_acoes}</p>
+</div>
+</div>
+""", unsafe_allow_html=True)
 
-# 4. TÍTULO DE STATUS (Com margin-top negativo para grudar no calendário)
         st.markdown(f"<h3 style='font-size: 1.2rem; text-align: left; margin-bottom: 10px; margin-top: -15px;'>📋 STATUS ({data_str[:5]})</h3>", unsafe_allow_html=True)
         
+        if 'Feedback' not in df_logs.columns:
+            df_logs['Feedback'] = ""
+
         # --- LOOP DE VOLUNTÁRIOS ---
         for _, vol in minha_equipe.iterrows():
             logs_vol_dia = df_logs[(df_logs['ID_Usuario'] == vol['ID_Usuario']) & (df_logs['Data_Hora'].str.contains(data_str))]
-            ultimos_logs = logs_vol_dia.tail(5)
             
             tem_checkin = not logs_vol_dia[logs_vol_dia['Tipo_Acao'].str.contains("Check-in")].empty
-            tem_missao = not logs_vol_dia[logs_vol_dia['Tipo_Acao'].str.contains("CONCLUIU:")].empty
             tem_redes = not logs_vol_dia[logs_vol_dia['Tipo_Acao'].str.contains("AÇÃO:")].empty
+            tem_missao = not logs_vol_dia[logs_vol_dia['Tipo_Acao'].str.contains("CONCLUIU:")].empty
             
             if tem_checkin and tem_missao: status_label = "🔥 COMPLETO"
             elif tem_checkin: status_label = "🟢 EM CAMPO"
@@ -817,64 +835,67 @@ elif cargo_limpo == "supervisor":
             else: status_label = "⚪ OFF"
 
             with st.expander(f"{status_label} | {vol['Nome'].upper()}"):
-                if not ultimos_logs.empty:
-                    feed_html = ""
-                    for _, row in ultimos_logs[::-1].iterrows():
+                if not logs_vol_dia.empty:
+                    # Itera sobre os últimos 5 logs de hoje
+                    for _, row in logs_vol_dia.tail(5)[::-1].iterrows():
                         acao_raw = str(row['Tipo_Acao'])
                         hora = row['Data_Hora'].split()[-1][:5]
-                        texto_limpo = acao_raw.replace("AÇÃO: ", "").replace("CONCLUIU: ", "").split("|")[0].split("Foto:")[0].strip().upper()
-                        loc = str(row['Localização'])
-                        botao_mapa = ""
+                        texto_limpo = acao_raw.split("|")[0].split("Foto:")[0].strip().upper()
                         
+                        # Extração do Feedback/Clima
+                        fb = str(row.get('Feedback', '')).strip()
+                        badge_clima = ""
+                        obs_txt = ""
+                        
+                        if fb and fb.lower() != "nan":
+                            partes = fb.split("|")
+                            clima_emoji = partes[0].strip()
+                            badge_clima = f"<span style='background-color:#FFEB00; border:1px solid #000; padding:1px 4px; font-size:0.6rem; font-weight:bold; margin-left:8px;'>{clima_emoji}</span>"
+                            if len(partes) > 1 and "Nenhuma" not in partes[1]:
+                                obs_txt = partes[1].replace("Obs:", "").strip()
+
+                        loc = str(row['Localização'])
+                        btn_mapa = ""
                         if "," in loc:
-                            botao_mapa = f"<a href='https://www.google.com/maps?q={loc}' target='_blank' style='background-color: #E20613; color: #FFFFFF; font-family: \"Archivo Black\", sans-serif; font-size: 0.55rem; padding: 4px 8px; text-decoration: none; border: 1px solid #1D1D1B; box-shadow: 2px 2px 0px #1D1D1B; text-transform: uppercase; white-space: nowrap;'>📍 MAPA</a>"
+                            link = f"https://www.google.com/maps?q={loc}"
+                            btn_mapa = f"<a href='{link}' target='_blank' style='background-color:#E20613; color:#FFF; padding:2px 6px; border:1px solid #000; font-size:0.5rem; text-decoration:none; font-family:Archivo Black;'>📍 MAPA</a>"
 
-                        feed_html += f"<div style='background-color: #F4F4F4; border: 2px solid #1D1D1B; padding: 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 3px 3px 0px #1D1D1B; margin-bottom: 10px;'>"
-                        feed_html += f"<div style='display: flex; flex-direction: column;'>"
-                        feed_html += f"<span style='font-family: \"Archivo Black\", sans-serif; font-size: 0.85rem; color: #1D1D1B;'>{texto_limpo}</span>"
-                        feed_html += f"<span style='font-size: 0.75rem; color: #666; font-weight: bold; margin-top: 4px;'>🕒 {hora}</span>"
-                        feed_html += "</div>"
-                        feed_html += f"<div>{botao_mapa}</div>"
-                        feed_html += "</div>"
-                    
-                    st.markdown(feed_html, unsafe_allow_html=True)
+                        # CARD DE ATIVIDADE (HTML Limpo sem recuo de margem)
+                        card_html = f"""
+<div style='background-color:#F4F4F4; border:2px solid #1D1D1B; padding:10px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; box-shadow:3px 3px 0px #1D1D1B;'>
+<div style='display:flex; flex-direction:column; text-align:left;'>
+<div style='display:flex; align-items:center;'>
+<span style='font-family:Archivo Black; font-size:0.8rem;'>{texto_limpo}</span>
+{badge_clima}
+</div>
+<span style='font-size:0.7rem; color:#666; font-weight:bold;'>🕒 {hora}</span>
+{f"<span style='font-size:0.7rem; color:#E20613; font-style:italic;'>💬 {obs_txt}</span>" if obs_txt else ""}
+</div>
+<div>{btn_mapa}</div>
+</div>
+"""
+                        st.markdown(card_html, unsafe_allow_html=True)
                 else:
-                    st.info(f"Nenhuma atividade registrada em {data_str[:5]}.")
+                    st.info(f"Sem atividades em {data_str[:5]}.")
 
+                # BOTÕES WHATSAPP
                 st.divider()
                 w_limpo = sanitize_whatsapp(vol['WhatsApp'])
                 p_nome = vol['Nome'].split()[0]
                 c_wa1, c_wa2 = st.columns(2)
-                
                 with c_wa1:
-                    # Correção: "btn_label, msg =" em todas as linhas
-                    if tem_checkin and tem_missao: 
-                        btn_label, msg = "🚀 PARABÉNS", f"Sensacional, {p_nome}! Vi seu relatório de {data_str[:5]}. Missão completa! 🔥"
-                    elif tem_checkin: 
-                        btn_label, msg = "💪 MOTIVAR", f"Bora, {p_nome}! Vi que no dia {data_str[:5]} você foi pra rua. Tamo junto! 🚀"
-                    elif tem_redes: 
-                        btn_label, msg = "⚡ REFORÇAR", f"Boa, {p_nome}! Vi sua mobilização digital no dia {data_str[:5]}. Nas próximas não esquece o check-in na rua! 💪"
-                    else: 
-                        btn_label, msg = "⚠️ COBRAR", f"Fala, {p_nome}! Tudo certo? Notei que não houve registro de atividades em {data_str[:5]}. Algum imprevisto?"
-
-                    st.link_button(btn_label, f"https://api.whatsapp.com/send?text={urllib.parse.quote(msg)}", width='stretch', type="primary")
-                
+                    if tem_checkin and tem_missao: b_l, msg = "🚀 PARABÉNS", f"Mandou bem, {p_nome}! Missão completa! 🔥"
+                    elif tem_checkin: b_l, msg = "💪 MOTIVAR", f"Bora, {p_nome}! Vi que está em campo. Pra cima! 🚀"
+                    elif tem_redes: b_l, msg = "⚡ REFORÇAR", f"Boa, {p_nome}! Vi que mobilizou as redes. Não esquece o check-in na rua! 💪"
+                    else: b_l, msg = "⚠️ COBRAR", f"Fala, {p_nome}! Ainda não vi suas atividades hoje. Algum problema?"
+                    st.link_button(b_l, f"https://api.whatsapp.com/send?text={urllib.parse.quote(msg)}", width='stretch', type="primary")
                 with c_wa2:
-                    st.link_button("💬 ABRIR CHAT", f"https://wa.me/{w_limpo}", width='stretch')
+                    st.link_button("💬 CHAT", f"https://wa.me/{w_limpo}", width='stretch')
 
-        # 5. BOTÃO DE ENVIAR RELATÓRIO NO FINAL (Abaixo de todos os box de voluntários)
+        # 5. RELATÓRIO FINAL
         st.markdown("<br>", unsafe_allow_html=True)
-        relatorio_msg = (
-            f"📊 *RELATÓRIO DA EQUIPE - COMANDO 2026*\n"
-            f"📅 Data: {data_str}\n"
-            f"👤 Supervisor: {nome_primeiro}\n\n"
-            f"👥 Total da Equipe: {total_vol}\n"
-            f"🔥 Ativos na Data: {num_ativos}\n"
-            f"🎯 Ações Realizadas: {total_acoes}\n\n"
-            f"Vamos pra cima! 🚀"
-        )
-        st.link_button("📲 ENVIAR RELATÓRIO P/ COORDENAÇÃO", f"https://api.whatsapp.com/send?text={urllib.parse.quote(relatorio_msg)}", width='stretch', type="primary")
-        st.markdown("<br><br>", unsafe_allow_html=True)
+        rel_msg = f"📊 *RELATÓRIO - {data_str}*\n👤 Sup: {nome_primeiro}\n👥 Equipe: {total_vol}\n🔥 Ativos: {num_ativos}\n🎯 Ações: {total_acoes}"
+        st.link_button("📲 ENVIAR RELATÓRIO P/ COORDENAÇÃO", f"https://api.whatsapp.com/send?text={urllib.parse.quote(rel_msg)}", width='stretch', type="primary")
 
 
 
@@ -1018,109 +1039,125 @@ elif cargo_limpo == "admin":
             st.error(f"Erro na conexão: {e}")
 
 # ==========================================
-    # ABA 3: DASHBOARD GERAL (COM ENDEREÇOS E FILTROS)
-    # ==========================================
-    with tab_logs:
-        st.markdown("<h2 style='font-family: \"Archivo Black\", sans-serif; color: #1D1D1B; margin-bottom: 25px; font-size: 2rem;'>MONITORAMENTO GLOBAL</h2>", unsafe_allow_html=True)
-        
-        # 1. TRATAMENTO DE DADOS E EXTRAÇÃO DE DATAS
-        # Garantir que as colunas existam para não quebrar o código
-        if 'Localização' not in df_logs.columns: df_logs['Localização'] = "Não informada"
-        if 'Endereço' not in df_logs.columns: df_logs['Endereço'] = "Log antigo/Sem GPS"
+# ABA 3: DASHBOARD GERAL (VISÃO COORDENAÇÃO)
+# ==========================================
+with tab_logs:
+    st.markdown("<h2 style='font-family: \"Archivo Black\", sans-serif; color: #1D1D1B; margin-bottom: 25px; font-size: 2rem;'>ESTATÍSTICAS DO COMANDO</h2>", unsafe_allow_html=True)
+    
+    # 1. TRATAMENTO DE DADOS
+    if 'Localização' not in df_logs.columns: df_logs['Localização'] = "Sem GPS"
+    if 'Endereço' not in df_logs.columns: df_logs['Endereço'] = "Não identificado"
+    if 'Feedback' not in df_logs.columns: df_logs['Feedback'] = "Nenhum"
 
-        df_logs['Data_Hora_DT'] = pd.to_datetime(df_logs['Data_Hora'], dayfirst=True, errors='coerce')
-        # Extrai apenas a data (DD/MM/YYYY) para o seletor
-        df_logs['Data_Filtro'] = df_logs['Data_Hora'].str.split().str[0]
-        
-        # Lista de datas para o selectbox (da mais recente para a mais antiga)
-        datas_disponiveis = sorted(
-            [d for d in df_logs['Data_Filtro'].unique().tolist() if isinstance(d, str) and "/" in d], 
-            key=lambda x: datetime.strptime(x, "%d/%m/%Y"), 
-            reverse=True
-        )
-        
-        # 2. SELETOR DE PERÍODO
-        c_filtro, _ = st.columns([1, 2])
-        with c_filtro:
-            opcoes_periodo = ["Histórico Completo"] + datas_disponiveis
-            periodo_selecionado = st.selectbox("📅 SELECIONE O DIA PARA ANÁLISE:", opcoes_periodo)
-        
-        # Merge para pegar os nomes dos usuários
-        df_completo = pd.merge(df_logs, df_usuarios[['ID_Usuario', 'Nome']], on='ID_Usuario', how='left')
-        df_completo['Nome'] = df_completo['Nome'].fillna(df_completo['ID_Usuario'])
-        
-        # Aplicação do Filtro
-        if periodo_selecionado == "Histórico Completo":
-            df_f = df_completo.copy()
-            texto_label = "TOTAL"
-        else:
-            df_f = df_completo[df_completo['Data_Filtro'] == periodo_selecionado].copy()
-            texto_label = periodo_selecionado[:5]
+    df_logs['Data_Hora_DT'] = pd.to_datetime(df_logs['Data_Hora'], dayfirst=True, errors='coerce')
+    df_logs['Data_Filtro'] = df_logs['Data_Hora'].str.split().str[0]
+    
+    datas_disponiveis = sorted(
+        [d for d in df_logs['Data_Filtro'].unique().tolist() if isinstance(d, str) and "/" in d], 
+        key=lambda x: datetime.strptime(x, "%d/%m/%Y"), 
+        reverse=True
+    )
 
-        # 3. CARDS DE IMPACTO (BRUTALISTAS)
-        total_acoes = len(df_f)
-        ativos_unicos = df_f['ID_Usuario'].nunique()
-        
-        st.markdown(f"""
-            <div style="display: flex; gap: 20px; margin-bottom: 30px;">
-                <div style="flex: 1; background: #FFF; border: 4px solid #1D1D1B; padding: 25px; text-align: center; box-shadow: 8px 8px 0px #1D1D1B;">
-                    <div style="font-family: 'Archivo Black', sans-serif; font-size: 1.1rem; color: #666; text-transform: uppercase;">AÇÕES ({texto_label})</div>
-                    <div style="font-family: 'Archivo Black', sans-serif; font-size: 4rem; color: #1D1D1B; line-height: 1; margin-top: 10px;">{total_acoes}</div>
-                </div>
-                <div style="flex: 1; background: #FFF; border: 4px solid #1D1D1B; padding: 25px; text-align: center; box-shadow: 8px 8px 0px #1D1D1B;">
-                    <div style="font-family: 'Archivo Black', sans-serif; font-size: 1.1rem; color: #666; text-transform: uppercase;">MEMBROS ATIVOS</div>
-                    <div style="font-family: 'Archivo Black', sans-serif; font-size: 4rem; color: #E20613; line-height: 1; margin-top: 10px;">{ativos_unicos}</div>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
+    # 2. ÁREA DE FILTROS LADO A LADO (PC-FIRST)
+    c_f1, c_f2 = st.columns([1, 1])
+    with c_f1:
+        periodo_selecionado = st.selectbox("📅 FILTRAR POR DATA:", ["Histórico Completo"] + datas_disponiveis)
+    with c_f2:
+        # Sugestão Adicional: Filtro por Supervisor
+        lista_sups = ["TODOS"] + df_usuarios[df_usuarios['Cargo'].str.lower() == "supervisor"]['Nome'].unique().tolist()
+        sup_filtro = st.selectbox("👤 FILTRAR POR SUPERVISOR:", lista_sups)
 
-        # 4. TABELA VISUAL DETALHADA (COM ENDEREÇO)
-        st.markdown("<h3 style='font-family: \"Archivo Black\", sans-serif; font-size: 1.4rem; text-align: left;'>📄 REGISTROS DE ATIVIDADE</h3>", unsafe_allow_html=True)
-        
-        # Ordenar e selecionar colunas para exibição na tela
-        df_visual = df_f.sort_values(by="Data_Hora_DT", ascending=False)
-        
-        st.dataframe(
-            df_visual[['Nome', 'Tipo_Acao', 'Data_Hora', 'Endereço']], 
-            column_config={
-                "Nome": "Membro", 
-                "Tipo_Acao": "Ação Realizada", 
-                "Data_Hora": "Horário",
-                "Endereço": "📍 Local (Aprox.)"
-            }, 
-            width='stretch', 
-            hide_index=True
-        )
+    # Merge para análise
+    df_completo = pd.merge(df_logs, df_usuarios[['ID_Usuario', 'Nome', 'ID_Supervisor', 'ID_Grupo']], on='ID_Usuario', how='left')
+    df_completo = pd.merge(df_completo, df_usuarios[['ID_Usuario', 'Nome']].rename(columns={'Nome': 'Supervisor_Nome', 'ID_Usuario': 'ID_Supervisor'}), on='ID_Supervisor', how='left')
+    df_completo['Nome'] = df_completo['Nome'].fillna(df_completo['ID_Usuario'])
 
-        # 5. EXPORTAÇÃO PARA EXCEL (.XLSX)
-        if not df_f.empty:
-            try:
-                # Prepara o DF para exportação com todas as colunas úteis
-                df_excel = df_visual[['Nome', 'Tipo_Acao', 'Data_Hora', 'Localização', 'Endereço']].copy()
-                
-                buffer = io.BytesIO()
-                with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                    df_excel.to_excel(writer, index=False, sheet_name='Relatorio_Comando')
-                    
-                    # Ajuste automático de colunas no Excel
-                    worksheet = writer.sheets['Relatorio_Comando']
-                    for idx, col in enumerate(df_excel.columns):
-                        max_len = max(df_excel[col].astype(str).map(len).max(), len(col)) + 2
-                        worksheet.set_column(idx, idx, max_len)
-                
-                st.markdown("<br>", unsafe_allow_html=True)
-                nome_arq = f"relatorio_comando_{periodo_selecionado.replace('/', '-')}.xlsx"
-                
-                st.download_button(
-                    label=f"📊 BAIXAR RELATÓRIO ({periodo_selecionado}) EM EXCEL",
-                    data=buffer.getvalue(),
-                    file_name=nome_arq,
-                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                    width='stretch',
-                    type="primary" # Botão Vermelho de Impacto
-                )
-            except Exception as e:
-                st.error(f"Erro ao gerar o arquivo Excel: {e}")
+    # Aplicação dos Filtros
+    df_f = df_completo.copy()
+    if periodo_selecionado != "Histórico Completo":
+        df_f = df_f[df_f['Data_Filtro'] == periodo_selecionado]
+    if sup_filtro != "TODOS":
+        df_f = df_f[df_f['Supervisor_Nome'] == sup_filtro]
+
+    # 3. CARDS DE IMPACTO
+    total_acoes = len(df_f)
+    ativos_unicos = df_f['ID_Usuario'].nunique()
+    checkins_total = len(df_f[df_f['Tipo_Acao'].str.contains("Check-in", case=False)])
+
+    st.markdown(f"""
+<div style="display: flex; gap: 15px; margin-bottom: 30px;">
+    <div style="flex: 1; background: #FFF; border: 4px solid #1D1D1B; padding: 20px; text-align: center; box-shadow: 6px 6px 0px #1D1D1B;">
+        <div style="font-family: 'Archivo Black'; font-size: 0.9rem; color: #666;">AÇÕES NO PERÍODO</div>
+        <div style="font-family: 'Archivo Black'; font-size: 3rem; color: #1D1D1B; line-height: 1; margin-top: 10px;">{total_acoes}</div>
+    </div>
+    <div style="flex: 1; background: #FFF; border: 4px solid #1D1D1B; padding: 20px; text-align: center; box-shadow: 6px 6px 0px #1D1D1B;">
+        <div style="font-family: 'Archivo Black'; font-size: 0.9rem; color: #666;">MEMBROS ATIVOS</div>
+        <div style="font-family: 'Archivo Black'; font-size: 3rem; color: #E20613; line-height: 1; margin-top: 10px;">{ativos_unicos}</div>
+    </div>
+    <div style="flex: 1; background: #FFF; border: 4px solid #1D1D1B; padding: 20px; text-align: center; box-shadow: 6px 6px 0px #1D1D1B;">
+        <div style="font-family: 'Archivo Black'; font-size: 0.9rem; color: #666;">PRESENÇA FÍSICA</div>
+        <div style="font-family: 'Archivo Black'; font-size: 3rem; color: #1D1D1B; line-height: 1; margin-top: 10px;">{checkins_total}</div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+    # 4. RESUMO DE PERFORMANCE POR EQUIPE (Sugestão de "outra coisa")
+    if not df_f.empty:
+        st.markdown("<h3 style='font-family: \"Archivo Black\", sans-serif; font-size: 1.4rem; text-align: left;'>🏆 RANKING POR EQUIPE</h3>", unsafe_allow_html=True)
+        # Agrupamento para ver produtividade por supervisor
+        df_rank = df_f.groupby('Supervisor_Nome').agg({
+            'Tipo_Acao': 'count',
+            'ID_Usuario': 'nunique'
+        }).reset_index().rename(columns={'Supervisor_Nome': 'Supervisor', 'Tipo_Acao': 'Total de Ações', 'ID_Usuario': 'Voluntários na Rua'})
+        
+        st.dataframe(df_rank.sort_values(by='Total de Ações', ascending=False), use_container_width=True, hide_index=True)
+
+    st.divider()
+
+    # 5. TABELA DE LOGS COMPLETA (ADICIONADA COLUNA FEEDBACK)
+    st.markdown("<h3 style='font-family: \"Archivo Black\", sans-serif; font-size: 1.4rem; text-align: left;'>📄 DETALHAMENTO DAS MISSÕES</h3>", unsafe_allow_html=True)
+    
+    # Adicionada a coluna Feedback na visualização
+    df_visual = df_f.sort_values(by="Data_Hora_DT", ascending=False)
+    
+    st.dataframe(
+        df_visual[['Nome', 'Tipo_Acao', 'Data_Hora', 'Feedback', 'Endereço']], 
+        column_config={
+            "Nome": "Voluntário", 
+            "Tipo_Acao": "Ação", 
+            "Data_Hora": "Horário",
+            "Feedback": "📣 Relato/Clima",
+            "Endereço": "📍 Local"
+        }, 
+        width='stretch', 
+        hide_index=True
+    )
+
+    # 6. EXPORTAÇÃO PARA EXCEL (Relatório Gerencial)
+    if not df_f.empty:
+        try:
+            df_excel = df_visual[['Nome', 'Supervisor_Nome', 'ID_Grupo', 'Tipo_Acao', 'Data_Hora', 'Feedback', 'Endereço', 'Localização']].copy()
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                df_excel.to_excel(writer, index=False, sheet_name='Relatorio_Completo')
+                worksheet = writer.sheets['Relatorio_Completo']
+                for idx, col in enumerate(df_excel.columns):
+                    max_len = max(df_excel[col].astype(str).map(len).max(), len(col)) + 2
+                    worksheet.set_column(idx, idx, max_len)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.download_button(
+                label=f"📊 BAIXAR RELATÓRIO COMPLETO EM EXCEL ({periodo_selecionado})",
+                data=buffer.getvalue(),
+                file_name=f'comando2026_relatorio_{sup_filtro}.xlsx',
+                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                width='stretch',
+                type="primary"
+            )
+        except Exception as e:
+            st.error(f"Erro ao gerar Excel: {e}")
+
+            
 # ==========================================
     # ABA 4: GESTÃO DE ACESSOS E GRUPOS
     # ==========================================
