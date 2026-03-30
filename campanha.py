@@ -1095,8 +1095,8 @@ elif cargo_limpo == "admin":
                             lista_html += "</div>"
                             st.markdown(lista_html, unsafe_allow_html=True)
 
-    # ==========================================
-    # ABA 2: MENSAGENS E MISSÕES
+# ==========================================
+    # ABA 2: MENSAGENS E MISSÕES (AJUSTADO P/ 4 COLUNAS)
     # ==========================================
     with tab_mensagens:
         st.markdown("<h2 style='font-family: \"Archivo Black\", sans-serif; color: #1D1D1B; margin-bottom: 25px; font-size: 2rem;'>DIRETRIZES DO DIA</h2>", unsafe_allow_html=True)
@@ -1111,32 +1111,55 @@ elif cargo_limpo == "admin":
         try:
             client = _get_gspread_client()
             aba_msg = client.open_by_key(st.secrets["planilha"]["id"]).worksheet("Mensagens")
-            df_msg = pd.DataFrame(aba_msg.get_all_records())
+            # Puxa os dados
+            dados_msg = aba_msg.get_all_records()
+            df_msg = pd.DataFrame(dados_msg)
 
-            alvo_selecionado = st.selectbox("1. SELECIONE O GRUPO:", ["Novo..."] + df_msg["ID_Alvo"].unique().tolist())
+            # Lista de alvos únicos
+            lista_alvos = df_msg["ID_Alvo"].unique().tolist() if not df_msg.empty else []
+            alvo_selecionado = st.selectbox("1. SELECIONE O GRUPO:", ["Novo..."] + lista_alvos)
 
             with st.form("form_admin_msg"):
-                if alvo_selecionado == "Novo...": id_alvo, msg_i, tar = "", "", ""
+                if alvo_selecionado == "Novo...": 
+                    id_alvo, msg_i, tar = "", "", ""
                 else:
+                    # Filtra a linha do grupo selecionado
                     d = df_msg[df_msg["ID_Alvo"] == alvo_selecionado].iloc[-1]
-                    id_alvo, msg_i, tar = d.get("ID_Alvo", ""), d.get("Mensagem_Inicial", ""), d.get("Tarefa_Direcionada", "")
+                    id_alvo = d.get("ID_Alvo", "")
+                    msg_i = d.get("Mensagem_Inicial", "")
+                    tar = d.get("Tarefa_Direcionada", "")
 
-                f_id = st.text_input("ID DO GRUPO (EX: ZONA_SUL):", value=id_alvo)
-                f_msg = st.text_area("MENSAGEM NO POP-UP DO COLABORADOR:", value=msg_i, height=200)
-                f_tar = st.text_area("MISSÃO PRIORITÁRIA DE RUA:", value=tar, height=120)
+                f_id = st.text_input("ID DO GRUPO (IGUAL AO CADASTRADO):", value=id_alvo)
+                f_msg = st.text_area("MENSAGEM NO POP-UP (BOAS-VINDAS):", value=msg_i, height=150)
+                f_tar = st.text_area("MISSÃO DE RUA (TAREFA PRINCIPAL):", value=tar, height=100)
 
-                if st.form_submit_button("🚀 PUBLICAR PARA A EQUIPE", type="primary", width='stretch'):
-                    data_auto = (datetime.utcnow() - timedelta(hours=3)).strftime("%d/%m/%Y")
-                    if alvo_selecionado != "Novo...":
-                        try:
-                            cell = aba_msg.find(str(alvo_selecionado))
-                            if cell: aba_msg.delete_rows(cell.row)
-                        except: pass
-                    aba_msg.append_row([f_id, f_msg, "", "", f_tar, data_auto])
-                    st.success("✅ MISSÃO PUBLICADA!")
-                    st.cache_data.clear()
-                    time.sleep(1)
-                    st.rerun()
+                if st.form_submit_button("🚀 ATUALIZAR DIRETRIZES", type="primary", width='stretch'):
+                    if f_id:
+                        # Data atual automatizada
+                        data_auto = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=3)).strftime("%d/%m/%Y")
+                        
+                        # --- NOVA LOGICA DE COLUNAS (A, B, C, D) ---
+                        # Alinhado com: ID_Alvo | Mensagem_Inicial | Tarefa_Direcionada | Data_Referencia
+                        nova_linha = [f_id, f_msg, f_tar, data_auto]
+                        
+                        # Se já existe, deleta a linha antiga para não duplicar o grupo
+                        if alvo_selecionado != "Novo...":
+                            try:
+                                cell = aba_msg.find(str(alvo_selecionado))
+                                if cell:
+                                    aba_msg.delete_rows(cell.row)
+                            except:
+                                pass
+                        
+                        # Adiciona a nova diretriz
+                        aba_msg.append_row(nova_linha)
+                        
+                        st.success(f"✅ DIRETRIZES PARA {f_id} ATUALIZADAS!")
+                        st.cache_data.clear()
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("O ID DO GRUPO É OBRIGATÓRIO")
         except Exception as e:
             st.error(f"Erro na conexão: {e}")
 
