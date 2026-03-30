@@ -189,6 +189,7 @@ st.markdown(f"""
                 font-size: 0.7rem !important;
                 padding: 8px 10px !important;
             }}
+        }}
 
 
     </style>
@@ -299,9 +300,8 @@ def modal_mensagem_dia(mensagem):
         <br>
     """, unsafe_allow_html=True)
     
-    # O BOTÃO É O ÚNICO QUE MUDA O ESTADO
     if st.button("ENTENDIDO / IR PARA MISSÕES", width='stretch', type="primary"):
-        st.session_state["mensagem_exibida"] = True  # <--- MUDANÇA AQUI
+        st.session_state["mensagem_exibida"] = True
         st.rerun()
 
 
@@ -677,6 +677,7 @@ if cargo_limpo in ["voluntario", "voluntário"]:
             # Chama o Modal do dia APENAS se não tiver sido exibido ainda
             if not st.session_state["mensagem_exibida"]:
                 modal_mensagem_dia(m['Mensagem_Inicial'])
+                st.stop()
 
     # 3. CAPTURA DE GPS COMPACTA
     location_data = get_geolocation()
