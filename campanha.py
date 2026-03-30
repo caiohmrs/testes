@@ -292,21 +292,6 @@ def modal_checkout(u, agora):
         else:
             st.error("⚠️ VOCÊ PRECISA TIRAR A FOTO PARA ENCERRAR!")
 
-@st.dialog("COMANDO 2026: INFORME")
-def modal_mensagem_dia(mensagem):
-    st.markdown(f"""
-        <div style='background-color: #FFEB00; padding: 20px; border: 3px solid #1D1D1B; text-align: center;'>
-            <h2 style='margin:0; font-family: "Archivo Black", sans-serif; font-style: italic; color: #1D1D1B;'>MENSAGEM DO DIA</h2>
-            <hr style='border: 1px solid #1D1D1B;'>
-            <p style='font-size: 1.2rem; font-weight: bold; color: #1D1D1B;'>{mensagem}</p>
-        </div>
-        <br>
-    """, unsafe_allow_html=True)
-    
-    if st.button("ENTENDIDO / IR PARA MISSÕES", width='stretch', type="primary"):
-        st.session_state["mensagem_exibida"] = True
-        st.rerun()
-
 
 
 def _get_drive_credentials():
