@@ -649,9 +649,8 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 
-# --- VISÃO: VOLUNTÁRIO ---
-if cargo_limpo in ["voluntario", "voluntário"]:
-    
+# --- VISÃO: COLABORADOR ---
+if cargo_limpo == "colaborador":
     # 1. Carregar dados das mensagens
     df_msgs = carregar_dados("Mensagens")
     df_usuarios = carregar_dados("Usuarios")
@@ -770,9 +769,9 @@ if cargo_limpo in ["voluntario", "voluntário"]:
 
         with col_m2:
             # --- LÓGICA WHATSAPP ---
-            if st.button("💬 TRAGA UM NOVO AMIGO PARA SER VOLUNTÁRIO!", width='stretch', key="fixo_whats"):
+            if st.button("💬 TRAGA UM NOVO AMIGO PARA SER COLABORADOR!", width='stretch', key="fixo_whats"):
                 # 1. Registra a ação no banco de dados
-                registrar_acao(u['ID_Usuario'], "AÇÃO: TRAZER NOVO VOLUNTÁRIO!", localizacao=st.session_state.get('last_coords'))
+                registrar_acao(u['ID_Usuario'], "AÇÃO: TRAZER NOVO COLABORADOR!", localizacao=st.session_state.get('last_coords'))
                 
                 # 2. Prepara a mensagem padrão (URL Encoded)
                 # Você pode alterar o texto abaixo como quiser!
@@ -833,7 +832,7 @@ if cargo_limpo in ["voluntario", "voluntário"]:
         if not dados_supervisor.empty:
             whats_sup = sanitize_whatsapp(dados_supervisor.iloc[0]['WhatsApp'])
             nome_sup = dados_supervisor.iloc[0]['Nome'].split()[0].upper()
-            msg_sup = f"Olá {nome_sup}! Sou voluntário da sua equipe e preciso de ajuda."
+            msg_sup = f"Olá {nome_sup}! Sou colaborador da sua equipe e preciso de ajuda."
             
             st.link_button(
                 f"👤 FALAR COM {nome_sup}", 
@@ -904,7 +903,7 @@ elif cargo_limpo == "supervisor":
         if 'Feedback' not in df_logs.columns:
             df_logs['Feedback'] = ""
 
-        # --- LOOP DE VOLUNTÁRIOS ---
+        # --- LOOP DE COLABORADORES ---
         for _, vol in minha_equipe.iterrows():
             logs_vol_dia = df_logs[(df_logs['ID_Usuario'] == vol['ID_Usuario']) & (df_logs['Data_Hora'].str.contains(data_str))]
             
@@ -961,9 +960,9 @@ elif cargo_limpo == "supervisor":
                 else:
                     st.info(f"Sem atividades em {data_str[:5]}.")
 
-# --- BOTÕES WHATSAPP (CORRIGIDOS PARA ABRIR DIRETO NO VOLUNTÁRIO) ---
+# --- BOTÕES WHATSAPP (CORRIGIDOS PARA ABRIR DIRETO NO COLABORADOR) ---
                 st.divider()
-                w_limpo = sanitize_whatsapp(vol['WhatsApp']) # Puxa o número limpo do voluntário
+                w_limpo = sanitize_whatsapp(vol['WhatsApp']) # Puxa o número limpo do colaborador
                 p_nome = vol['Nome'].split()[0]
                 
                 c_wa1, c_wa2 = st.columns(2)
@@ -979,7 +978,7 @@ elif cargo_limpo == "supervisor":
                     else: 
                         b_l, msg = "⚠️ COBRAR", f"Fala, {p_nome}! Ainda não vi suas atividades hoje. Algum problema?"
                     
-                    # LINK ATUALIZADO: Agora inclui o número do voluntário (w_limpo)
+                    # LINK ATUALIZADO: Agora inclui o número do colaborador (w_limpo)
                     st.link_button(
                         b_l, 
                         f"https://wa.me/{w_limpo}?text={urllib.parse.quote(msg)}", 
@@ -988,7 +987,7 @@ elif cargo_limpo == "supervisor":
                     )
                 
                 with c_wa2:
-                    # LINK ATUALIZADO: Abre o chat direto com o voluntário sem mensagem
+                    # LINK ATUALIZADO: Abre o chat direto com o colaborador sem mensagem
                     st.link_button(
                         "💬 ABRIR CHAT", 
                         f"https://wa.me/{w_limpo}", 
@@ -1082,7 +1081,7 @@ elif cargo_limpo == "admin":
                     w_sup = sanitize_whatsapp(sup['WhatsApp'])
                     st.link_button(f"💬 CHAT: {sup['Nome'].split()[0].upper()}", f"https://wa.me/{w_sup}", width='stretch')
                     
-                    with st.expander(f"👥 LISTA DE VOLUNTÁRIOS"):
+                    with st.expander(f"👥 LISTA DE COLABORADORES"):
                         if not equipe.empty:
                             lista_html = "<div style='display: flex; flex-direction: column; gap: 10px;'>"
                             for _, vol in equipe.iterrows():
@@ -1123,7 +1122,7 @@ elif cargo_limpo == "admin":
                     id_alvo, msg_i, tar = d.get("ID_Alvo", ""), d.get("Mensagem_Inicial", ""), d.get("Tarefa_Direcionada", "")
 
                 f_id = st.text_input("ID DO GRUPO (EX: ZONA_SUL):", value=id_alvo)
-                f_msg = st.text_area("MENSAGEM NO POP-UP DO VOLUNTÁRIO:", value=msg_i, height=200)
+                f_msg = st.text_area("MENSAGEM NO POP-UP DO COLABORADOR:", value=msg_i, height=200)
                 f_tar = st.text_area("MISSÃO PRIORITÁRIA DE RUA:", value=tar, height=120)
 
                 if st.form_submit_button("🚀 PUBLICAR PARA A EQUIPE", type="primary", width='stretch'):
@@ -1211,7 +1210,7 @@ elif cargo_limpo == "admin":
             df_rank = df_f.groupby('Supervisor_Nome').agg({
                 'Tipo_Acao': 'count',
                 'ID_Usuario': 'nunique'
-            }).reset_index().rename(columns={'Supervisor_Nome': 'Supervisor', 'Tipo_Acao': 'Total de Ações', 'ID_Usuario': 'Voluntários na Rua'})
+            }).reset_index().rename(columns={'Supervisor_Nome': 'Supervisor', 'Tipo_Acao': 'Total de Ações', 'ID_Usuario': 'Colaboradores na Rua'})
             
             st.dataframe(df_rank.sort_values(by='Total de Ações', ascending=False), use_container_width=True, hide_index=True)
 
@@ -1226,7 +1225,7 @@ elif cargo_limpo == "admin":
         st.dataframe(
             df_visual[['Nome', 'Tipo_Acao', 'Data_Hora', 'Feedback', 'Endereço']], 
             column_config={
-                "Nome": "Voluntário", 
+                "Nome": "Colaborador", 
                 "Tipo_Acao": "Ação", 
                 "Data_Hora": "Horário",
                 "Feedback": "📣 Relato/Clima",
@@ -1297,7 +1296,7 @@ elif cargo_limpo == "admin":
                         n_whats = st.text_input("WHATSAPP (DDD + NÚMERO):")
                     with c2:
                         st.markdown("**VÍNCULO NO COMANDO**")
-                        n_cargo = st.selectbox("CARGO:", ["Voluntario", "Supervisor", "Admin"])
+                        n_cargo = st.selectbox("CARGO:", ["Colaborador", "Supervisor", "Admin"])
                         n_grupo = st.selectbox("GRUPO / TERRITÓRIO:", options=lista_grupos)
                         
                         # O dropdown agora mostra os nomes formatados
@@ -1342,7 +1341,7 @@ elif cargo_limpo == "admin":
             with st.container(border=True):
                 st.info("💡 Ao criar o grupo aqui, ele ficará disponível para seleção no cadastro de usuários.")
                 with st.form("form_novo_grupo_v2", clear_on_submit=True):
-                    g_nome = st.text_input("NOME DO GRUPO (Ex: CELANDIA_CENTRO):").strip().upper()
+                    g_nome = st.text_input("NOME DO GRUPO (Ex: CEILANDIA_CENTRO):").strip().upper()
                     
                     if st.form_submit_button("➕ REGISTRAR GRUPO NO SISTEMA", width='stretch'):
                         if g_nome:
