@@ -660,8 +660,12 @@ if cargo_limpo == "colaborador":
         msg_grupo = df_msgs[df_msgs['ID_Alvo'].astype(str).str.strip() == str(u['ID_Grupo']).strip()]
         
         # --- LÓGICA DE TELA DE BLOQUEIO (SPLASH SCREEN) ---
-        if not msg_grupo.empty and not st.session_state["mensagem_exibida"]:
+        if not msg_grupo.empty:
             m = msg_grupo.iloc[-1]
+            # Se não confirmou a mensagem hoje, mostra o splash
+            if not st.session_state["mensagem_exibida"]:
+                modal_mensagem_dia(m['Mensagem_Inicial'])
+                st.stop()
             
             # Criamos uma tela cheia amarela com a mensagem
             st.markdown(f"""
@@ -735,10 +739,17 @@ if cargo_limpo == "colaborador":
         """, unsafe_allow_html=True)
 
 # TAREFA PRINCIPAL (Puxa da coluna 'Tarefa_Direcionada')
-        if m is not None and str(m.get('Tarefa_Direcionada', 'nan')).lower() != 'nan' and str(m.get('Tarefa_Direcionada', '')).strip() != "":
-            t_txt = str(m['Tarefa_Direcionada']).upper()
-        else:
-            t_txt = "MOBILIZAÇÃO GERAL E PANFLETAGEM" # Texto padrão caso esteja vazio na planilha
+    with tab_missoes:
+        # Lógica de extração segura da tarefa
+        t_txt = ""
+        if m is not None:
+            # Tenta pegar a coluna 'Tarefa_Direcionada' (Coluna C)
+            val_planilha = str(m.get('Tarefa_Direcionada', '')).strip()
+            if val_planilha.lower() != 'nan' and val_planilha != "":
+                t_txt = val_planilha.upper()
+
+        if not t_txt:
+            t_txt = "MOBILIZAÇÃO GERAL E PANFLETAGEM"
 
         with st.container(border=True): 
             st.markdown(f"<h3 style='text-align: center; color: #1D1D1B; margin-bottom: 10px;'>🚩 MISSÃO PRIORITÁRIA</h3>", unsafe_allow_html=True)
@@ -746,8 +757,8 @@ if cargo_limpo == "colaborador":
             
             if st.button(f"CONCLUIR MISSÃO DE HOJE", width='stretch', key="btn_tarefa_fixa"):
                 registrar_acao(u['ID_Usuario'], f"CONCLUIU: {t_txt}", localizacao=st.session_state.get('last_coords'))
-                st.success("MISSÃO REGISTRADA COM SUCESSO!")
-
+                st.success("MISSÃO REGISTRADA!")
+                
         st.markdown("<br>", unsafe_allow_html=True)
 
 # --- AÇÕES DE REDE FIXAS ---
@@ -1134,14 +1145,12 @@ elif cargo_limpo == "admin":
 
                 if st.form_submit_button("🚀 ATUALIZAR DIRETRIZES", type="primary", width='stretch'):
                     if f_id:
-                        # Data atual automatizada
                         data_auto = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=3)).strftime("%d/%m/%Y")
                         
-                        # --- NOVA LOGICA DE COLUNAS (A, B, C, D) ---
-                        # Alinhado com: ID_Alvo | Mensagem_Inicial | Tarefa_Direcionada | Data_Referencia
+                        # SÃO APENAS ESSES 4 VALORES:
+                        # A=ID_Alvo, B=Mensagem_Inicial, C=Tarefa_Direcionada, D=Data_Referencia
                         nova_linha = [f_id, f_msg, f_tar, data_auto]
                         
-                        # Se já existe, deleta a linha antiga para não duplicar o grupo
                         if alvo_selecionado != "Novo...":
                             try:
                                 cell = aba_msg.find(str(alvo_selecionado))
@@ -1150,12 +1159,9 @@ elif cargo_limpo == "admin":
                             except:
                                 pass
                         
-                        # Adiciona a nova diretriz
-                        aba_msg.append_row(nova_linha)
-                        
-                        st.success(f"✅ DIRETRIZES PARA {f_id} ATUALIZADAS!")
+                        aba_msg.append_row(nova_linha) # Salva exatamente nas colunas A, B, C, D
+                        st.success("✅ ATUALIZADO!")
                         st.cache_data.clear()
-                        time.sleep(1)
                         st.rerun()
                     else:
                         st.error("O ID DO GRUPO É OBRIGATÓRIO")
