@@ -191,7 +191,10 @@ st.markdown(f"""
             }}
         }}
 
-
+        /* OCULTAR O BOTÃO DE FECHAR (X) DOS DIALOGS */
+        button[aria-label="Close"] {{
+            display: none !important;
+        }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -677,7 +680,7 @@ if cargo_limpo in ["voluntario", "voluntário"]:
             # Chama o Modal do dia APENAS se não tiver sido exibido ainda
             if not st.session_state["mensagem_exibida"]:
                 modal_mensagem_dia(m['Mensagem_Inicial'])
-                st.stop()
+
 
     # 3. CAPTURA DE GPS COMPACTA
     location_data = get_geolocation()
