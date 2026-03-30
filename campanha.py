@@ -657,7 +657,7 @@ if cargo_limpo == "colaborador":
     m = None
     
     if df_msgs is not None:
-        msg_grupo = df_msgs[df_msgs['ID_Alvo'].astype(str) == str(u['ID_Grupo'])]
+        msg_grupo = df_msgs[df_msgs['ID_Alvo'].astype(str).str.strip() == str(u['ID_Grupo']).strip()]
         
         # --- LÓGICA DE TELA DE BLOQUEIO (SPLASH SCREEN) ---
         if not msg_grupo.empty and not st.session_state["mensagem_exibida"]:
@@ -734,19 +734,18 @@ if cargo_limpo == "colaborador":
             </div>
         """, unsafe_allow_html=True)
 
-        # TAREFA PRINCIPAL (Puxa da planilha se m existir, senão usa texto padrão)
-        if m is not None and str(m['Tarefa_Direcionada']) != "nan":
+# TAREFA PRINCIPAL (Puxa da coluna 'Tarefa_Direcionada')
+        if m is not None and str(m.get('Tarefa_Direcionada', 'nan')).lower() != 'nan' and str(m.get('Tarefa_Direcionada', '')).strip() != "":
             t_txt = str(m['Tarefa_Direcionada']).upper()
         else:
-            t_txt = "MOBILIZAÇÃO GERAL E PANFLETAGEM"
+            t_txt = "MOBILIZAÇÃO GERAL E PANFLETAGEM" # Texto padrão caso esteja vazio na planilha
 
         with st.container(border=True): 
             st.markdown(f"<h3 style='text-align: center; color: #1D1D1B; margin-bottom: 10px;'>🚩 MISSÃO PRIORITÁRIA</h3>", unsafe_allow_html=True)
-            st.markdown(f"<p style='text-align: center; font-weight: bold; font-size: 1.1rem;'>{t_txt}</p>", unsafe_allow_html=True)
+            st.markdown(f"<p style='text-align: center; font-weight: bold; font-size: 1.1rem; color: #E20613;'>{t_txt}</p>", unsafe_allow_html=True)
             
             if st.button(f"CONCLUIR MISSÃO DE HOJE", width='stretch', key="btn_tarefa_fixa"):
                 registrar_acao(u['ID_Usuario'], f"CONCLUIU: {t_txt}", localizacao=st.session_state.get('last_coords'))
-            
                 st.success("MISSÃO REGISTRADA COM SUCESSO!")
 
         st.markdown("<br>", unsafe_allow_html=True)
