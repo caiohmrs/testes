@@ -667,19 +667,38 @@ st.markdown(f"""
 # --- VISÃO: VOLUNTÁRIO ---
 if cargo_limpo in ["voluntario", "voluntário"]:
     
-    # 1. CARREGAMENTO PRÉVIO DA MENSAGEM (Para evitar o NameError 'm')
+    # 1. Carregar dados das mensagens
     df_msgs = carregar_dados("Mensagens")
     df_usuarios = carregar_dados("Usuarios")
-    m = None  # Inicializamos m como vazio
     
     if df_msgs is not None:
         msg_grupo = df_msgs[df_msgs['ID_Alvo'].astype(str) == str(u['ID_Grupo'])]
-        if not msg_grupo.empty:
-            m = msg_grupo.iloc[-1]  # Agora m existe para todo o código do voluntário
+        
+        # --- LÓGICA DE TELA DE BLOQUEIO (SPLASH SCREEN) ---
+        if not msg_grupo.empty and not st.session_state["mensagem_exibida"]:
+            m = msg_grupo.iloc[-1]
             
-            # Chama o Modal do dia APENAS se não tiver sido exibido ainda
-            if not st.session_state["mensagem_exibida"]:
-                modal_mensagem_dia(m['Mensagem_Inicial'])
+            # Criamos uma tela cheia amarela com a mensagem
+            st.markdown(f"""
+                <div style='background-color: #FFEB00; padding: 40px 20px; border: 5px solid #1D1D1B; 
+                            box-shadow: 10px 10px 0px #1D1D1B; text-align: center; margin-top: 20px;'>
+                    <h1 style='font-family: "Archivo Black", sans-serif; font-style: italic; color: #1D1D1B; font-size: 2.5rem;'>
+                        COMANDO 2026<br><span style='color: #E20613;'>INFORME DO DIA</span>
+                    </h1>
+                    <hr style='border: 2px solid #1D1D1B; margin: 20px 0;'>
+                    <p style='font-size: 1.4rem; font-weight: bold; color: #1D1D1B; line-height: 1.4;'>
+                        {m['Mensagem_Inicial']}
+                    </p>
+                </div>
+                <br>
+            """, unsafe_allow_html=True)
+            
+            # O botão de entrar fica logo abaixo do poster
+            if st.button("✅ LI AS INSTRUÇÕES E QUERO ENTRAR", width='stretch', type="primary"):
+                st.session_state["mensagem_exibida"] = True
+                st.rerun()
+                
+            st.stop()
 
 
     # 3. CAPTURA DE GPS COMPACTA
