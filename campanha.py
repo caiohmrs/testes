@@ -655,6 +655,7 @@ if cargo_limpo in ["voluntario", "voluntário"]:
     # 1. Carregar dados das mensagens
     df_msgs = carregar_dados("Mensagens")
     df_usuarios = carregar_dados("Usuarios")
+    m = None
     
     if df_msgs is not None:
         msg_grupo = df_msgs[df_msgs['ID_Alvo'].astype(str) == str(u['ID_Grupo'])]
