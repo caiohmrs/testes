@@ -9,6 +9,7 @@ import pandas as pd
 import requests
 from geopy.geocoders import Nominatim
 import streamlit as st
+import traceback
 
 # Google Credentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
@@ -82,7 +83,7 @@ def sanitize_whatsapp(v):
 # FUNÇÕES DE GOOGLE - CREDENCIAIS
 # =============================================================================
 
-def _get_drive_credentials(secrets):
+def _get_drive_credentials(secrets, error_log=None):
     """Usa OAuthCredentials (Refresh Token) para os 15GB do Drive"""
     try:
         creds_info = secrets["google_drive"]
@@ -98,38 +99,74 @@ def _get_drive_credentials(secrets):
                 creds.refresh(Request())
         return creds
     except Exception as e:
+        if error_log is not None:
+            error_log.append({
+                'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                'erro': str(e),
+                'funcao': '_get_drive_credentials',
+                'traceback': traceback.format_exc(),
+                'tipo': type(e).__name__
+            })
         print(f"Erro ao carregar credenciais do Drive: {e}")
         return None
 
 
-def _get_sheets_credentials(secrets):
+def _get_sheets_credentials(secrets, error_log=None):
     """Service Account - Para o Sheets (Logs/Usuarios)"""
     try:
         creds_dict = secrets.get("connections", {}).get("gsheets")
         scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         return ServiceAccountCredentials.from_service_account_info(creds_dict, scopes=scope)
     except Exception as e:
+        if error_log is not None:
+            error_log.append({
+                'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                'erro': str(e),
+                'funcao': '_get_sheets_credentials',
+                'traceback': traceback.format_exc(),
+                'tipo': type(e).__name__
+            })
         print(f"Erro credenciais Sheets: {e}")
         return None
 
 
-def _get_gspread_client(secrets):
+def _get_gspread_client(secrets, error_log=None):
     """Inicializa cliente do Google Sheets"""
-    creds = _get_sheets_credentials(secrets)
-    return gspread.authorize(creds) if creds else None
+    try:
+        creds = _get_sheets_credentials(secrets, error_log)
+        return gspread.authorize(creds) if creds else None
+    except Exception as e:
+        if error_log is not None:
+            error_log.append({
+                'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                'erro': str(e),
+                'funcao': '_get_gspread_client',
+                'traceback': traceback.format_exc(),
+                'tipo': type(e).__name__
+            })
+        print(f"Erro ao inicializar gspread: {e}")
+        return None
 
 
 # =============================================================================
 # FUNÇÕES DE GOOGLE SHEETS - DADOS
 # =============================================================================
 
-def carregar_dados(nome_aba, planilha_id):
+def carregar_dados(nome_aba, planilha_id, error_log=None):
     """Carrega dados de uma aba da planilha como DataFrame"""
     try:
         url = f"https://docs.google.com/spreadsheets/d/{planilha_id}/gviz/tq?tqx=out:csv&sheet={nome_aba}"
         df = pd.read_csv(url)
         return df.astype(str).apply(lambda x: x.str.strip())
     except Exception as e:
+        if error_log is not None:
+            error_log.append({
+                'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                'erro': str(e),
+                'funcao': 'carregar_dados',
+                'traceback': traceback.format_exc(),
+                'tipo': type(e).__name__
+            })
         print(f"Erro ao carregar dados: {e}")
         return None
 
@@ -142,7 +179,7 @@ def registrar_acao(id_usuario, tipo_acao, localizacao, feedback, secrets, error_
         if not gps_valido:
             loc_safe = "GPS Inválido/Desativado"
 
-        client = _get_gspread_client(secrets)
+        client = _get_gspread_client(secrets, error_log)
         if client is None:
             return False
 
@@ -152,7 +189,7 @@ def registrar_acao(id_usuario, tipo_acao, localizacao, feedback, secrets, error_
 
         endereco = "Sem GPS"
         if gps_valido:
-            endereco = obter_endereco_simples(loc_safe)
+            endereco = obter_endereco_simples(loc_safe, error_log)
 
         aba.append_row([
             agora_br.strftime("%Y%m%d%H%M%S"),
@@ -168,17 +205,20 @@ def registrar_acao(id_usuario, tipo_acao, localizacao, feedback, secrets, error_
     except Exception as e:
         if error_log is not None:
             error_log.append({
-                'data': get_agora_br(),
+                'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
                 'erro': str(e),
-                'funcao': 'registrar_acao'
+                'funcao': 'registrar_acao',
+                'traceback': traceback.format_exc(),
+                'tipo': type(e).__name__
             })
+        print(f"Erro ao registrar ação: {e}")
         return False
 
 
-def registrar_novo_contrato_admin(id_usuario, nome_arquivo, link_original, secrets):
+def registrar_novo_contrato_admin(id_usuario, nome_arquivo, link_original, secrets, error_log=None):
     """Cria uma nova linha na aba Contratos"""
     try:
-        client = _get_gspread_client(secrets)
+        client = _get_gspread_client(secrets, error_log)
         if client is None:
             return False
 
@@ -194,14 +234,22 @@ def registrar_novo_contrato_admin(id_usuario, nome_arquivo, link_original, secre
         ])
         return True
     except Exception as e:
+        if error_log is not None:
+            error_log.append({
+                'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                'erro': str(e),
+                'funcao': 'registrar_novo_contrato_admin',
+                'traceback': traceback.format_exc(),
+                'tipo': type(e).__name__
+            })
         print(f"Erro ao registrar contrato: {e}")
         return False
 
 
-def atualizar_contrato_enviado(id_usuario, nome_arquivo, link_drive, secrets):
+def atualizar_contrato_enviado(id_usuario, nome_arquivo, link_drive, secrets, error_log=None):
     """Atualiza o link e status do contrato na planilha"""
     try:
-        client = _get_gspread_client(secrets)
+        client = _get_gspread_client(secrets, error_log)
         if client is None:
             return False
 
@@ -230,6 +278,14 @@ def atualizar_contrato_enviado(id_usuario, nome_arquivo, link_drive, secrets):
             return True
         return False
     except Exception as e:
+        if error_log is not None:
+            error_log.append({
+                'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                'erro': str(e),
+                'funcao': 'atualizar_contrato_enviado',
+                'traceback': traceback.format_exc(),
+                'tipo': type(e).__name__
+            })
         print(f"Falha ao atualizar contrato: {e}")
         return False
 
@@ -238,10 +294,10 @@ def atualizar_contrato_enviado(id_usuario, nome_arquivo, link_drive, secrets):
 # FUNÇÕES DE GOOGLE DRIVE - UPLOAD
 # =============================================================================
 
-def salvar_foto_drive(foto_arquivo, nome_arquivo, secrets):
+def salvar_foto_drive(foto_arquivo, nome_arquivo, secrets, error_log=None):
     """Salva foto no Google Drive"""
     try:
-        creds = _get_drive_credentials(secrets)
+        creds = _get_drive_credentials(secrets, error_log)
         if not creds:
             return None
 
@@ -265,14 +321,22 @@ def salvar_foto_drive(foto_arquivo, nome_arquivo, secrets):
 
         return file.get('webViewLink')
     except Exception as e:
+        if error_log is not None:
+            error_log.append({
+                'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                'erro': str(e),
+                'funcao': 'salvar_foto_drive',
+                'traceback': traceback.format_exc(),
+                'tipo': type(e).__name__
+            })
         print(f"Erro no Drive (Foto): {e}")
         return None
 
 
-def salvar_documento_drive(doc_arquivo, nome_arquivo, secrets):
+def salvar_documento_drive(doc_arquivo, nome_arquivo, secrets, error_log=None):
     """Salva documento PDF no Google Drive"""
     try:
-        creds = _get_drive_credentials(secrets)
+        creds = _get_drive_credentials(secrets, error_log)
         if not creds:
             return None
 
@@ -296,6 +360,14 @@ def salvar_documento_drive(doc_arquivo, nome_arquivo, secrets):
 
         return file.get('webViewLink')
     except Exception as e:
+        if error_log is not None:
+            error_log.append({
+                'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                'erro': str(e),
+                'funcao': 'salvar_documento_drive',
+                'traceback': traceback.format_exc(),
+                'tipo': type(e).__name__
+            })
         print(f"Erro no Drive (Docs): {e}")
         return None
 
@@ -304,7 +376,7 @@ def salvar_documento_drive(doc_arquivo, nome_arquivo, secrets):
 # FUNÇÕES DE API EXTERNA
 # =============================================================================
 
-def obter_endereco_simples(coords_str):
+def obter_endereco_simples(coords_str, error_log=None):
     """Converte 'lat, lon' em um endereço curto (Rua ou Bairro)"""
     c_str = str(coords_str) if coords_str is not None else ""
 
@@ -323,13 +395,18 @@ def obter_endereco_simples(coords_str):
         if rua:
             return f"{rua}, {bairro}".strip(", ")
         return f"{bairro}, {cidade}".strip(", ")
-    except:
+    except Exception as e:
+        if error_log is not None:
+            error_log.append({
+                'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                'erro': str(e),
+                'funcao': 'obter_endereco_simples',
+                'traceback': traceback.format_exc(),
+                'tipo': type(e).__name__
+            })
+        print(f"Erro ao obter endereço: {e}")
         return "Endereço indisponível"
 
-
-# =============================================================================
-# FUNÇÕES DE GESTÃO DE GRUPOS E MACRO_GRUPOS
-# =============================================================================
 
 # =============================================================================
 # FUNÇÕES DE GESTÃO DE GRUPOS E MACRO_GRUPOS (COM CACHE)
@@ -376,10 +453,10 @@ def carregar_grupos_completos_cached(planilha_id):
         return []
 
 
-def criar_novo_grupo(nome_grupo, macro_grupo, link_grupo, secrets):
+def criar_novo_grupo(nome_grupo, macro_grupo, link_grupo, secrets, error_log=None):
     """Cria um novo grupo na planilha"""
     try:
-        client = _get_gspread_client(secrets)
+        client = _get_gspread_client(secrets, error_log)
         if client is None:
             return False, "Erro de conexão"
 
@@ -405,13 +482,21 @@ def criar_novo_grupo(nome_grupo, macro_grupo, link_grupo, secrets):
 
         return True, "Grupo criado com sucesso"
     except Exception as e:
+        if error_log is not None:
+            error_log.append({
+                'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                'erro': str(e),
+                'funcao': 'criar_novo_grupo',
+                'traceback': traceback.format_exc(),
+                'tipo': type(e).__name__
+            })
         return False, f"Erro: {str(e)}"
 
 
-def criar_novo_macro_grupo(nome_macro, secrets):
+def criar_novo_macro_grupo(nome_macro, secrets, error_log=None):
     """Cria um novo Macro_Grupo (adiciona entrada na planilha Grupos)"""
     try:
-        client = _get_gspread_client(secrets)
+        client = _get_gspread_client(secrets, error_log)
         if client is None:
             return False, "Erro de conexão"
 
@@ -437,65 +522,129 @@ def criar_novo_macro_grupo(nome_macro, secrets):
 
         return True, "Macro_Grupo criado com sucesso"
     except Exception as e:
+        if error_log is not None:
+            error_log.append({
+                'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                'erro': str(e),
+                'funcao': 'criar_novo_macro_grupo',
+                'traceback': traceback.format_exc(),
+                'tipo': type(e).__name__
+            })
         return False, f"Erro: {str(e)}"
 
 
-def editar_grupo(nome_grupo_antigo, nome_grupo_novo, macro_grupo_novo, link_grupo, secrets):
-    """Edita um grupo existente"""
+
+# =============================================================================
+# FUNÇÕES DE DIAGNÓSTICO E SUPORTE TÉCNICO
+# =============================================================================
+
+def diagnosticar_conexoes(secrets, error_log=None):
+    """Testa todas as conexões do sistema e retorna status"""
+    resultados = {
+        'sheets': {'status': '❌', 'msg': ''},
+        'drive': {'status': '❌', 'msg': ''},
+        'planilha': {'status': '❌', 'msg': ''},
+        'cache': {'status': '❌', 'msg': ''}
+    }
+
+    # Teste Google Sheets
     try:
-        client = _get_gspread_client(secrets)
-        if client is None:
-            return False, "Erro de conexão"
-
-        planilha = client.open_by_key(secrets["planilha"]["id"])
-        aba = planilha.worksheet("Grupos")
-
-        dados = aba.get_all_records()
-        linha_para_editar = None
-
-        for i, row in enumerate(dados, start=2):
-            if str(row.get('ID_Grupo', '')).upper() == str(nome_grupo_antigo).upper():
-                linha_para_editar = i
-                break
-
-        if linha_para_editar:
-            aba.update_cell(linha_para_editar, 1, str(nome_grupo_novo).upper())
-            aba.update_cell(linha_para_editar, 2, str(macro_grupo_novo).strip())
-            aba.update_cell(linha_para_editar, 3, str(link_grupo).strip())
-
-            # Limpa cache após edição
-            carregar_macro_grupos_cached.clear()
-            carregar_grupos_completos_cached.clear()
-
-            return True, "Grupo atualizado com sucesso"
-
-        return False, "Grupo não encontrado"
+        client = _get_gspread_client(secrets, error_log)
+        if client:
+            resultados['sheets'] = {'status': '✅', 'msg': 'Conectado'}
+            planilha = client.open_by_key(secrets["planilha"]["id"])
+            resultados['planilha'] = {'status': '✅', 'msg': f'{planilha.title}'}
+        else:
+            resultados['sheets'] = {'status': '❌', 'msg': 'Falha na autenticação'}
     except Exception as e:
-        return False, f"Erro: {str(e)}"
+        if error_log is not None:
+            error_log.append({
+                'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                'erro': str(e),
+                'funcao': 'diagnosticar_conexoes.sheets',
+                'traceback': traceback.format_exc(),
+                'tipo': type(e).__name__
+            })
+        resultados['sheets'] = {'status': '❌', 'msg': str(e)}
 
-
-def excluir_grupo(nome_grupo, secrets):
-    """Exclui um grupo da planilha"""
+    # Teste Google Drive
     try:
-        client = _get_gspread_client(secrets)
-        if client is None:
-            return False, "Erro de conexão"
-
-        planilha = client.open_by_key(secrets["planilha"]["id"])
-        aba = planilha.worksheet("Grupos")
-
-        dados = aba.get_all_records()
-
-        for i, row in enumerate(dados, start=2):
-            if str(row.get('ID_Grupo', '')).upper() == str(nome_grupo).upper():
-                aba.delete_rows(i)
-
-                # Limpa cache após exclusão
-                carregar_macro_grupos_cached.clear()
-                carregar_grupos_completos_cached.clear()
-
-                return True, "Grupo excluído com sucesso"
-
-        return False, "Grupo não encontrado"
+        creds = _get_drive_credentials(secrets, error_log)
+        if creds:
+            resultados['drive'] = {'status': '✅', 'msg': 'Conectado'}
+        else:
+            resultados['drive'] = {'status': '❌', 'msg': 'Falha na autenticação'}
     except Exception as e:
-        return False, f"Erro: {str(e)}"
+        if error_log is not None:
+            error_log.append({
+                'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                'erro': str(e),
+                'funcao': 'diagnosticar_conexoes.drive',
+                'traceback': traceback.format_exc(),
+                'tipo': type(e).__name__
+            })
+        resultados['drive'] = {'status': '❌', 'msg': str(e)}
+
+    # Teste Cache
+    try:
+        carregar_macro_grupos_cached(secrets["planilha"]["id"])
+        resultados['cache'] = {'status': '✅', 'msg': 'Funcionando'}
+    except Exception as e:
+        if error_log is not None:
+            error_log.append({
+                'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                'erro': str(e),
+                'funcao': 'diagnosticar_conexoes.cache',
+                'traceback': traceback.format_exc(),
+                'tipo': type(e).__name__
+            })
+        resultados['cache'] = {'status': '❌', 'msg': str(e)}
+
+    return resultados
+
+
+def obter_logs_erros(error_log_session, limite=50):
+    """Retorna lista de erros da sessão atual"""
+    if not error_log_session:
+        return []
+
+    return error_log_session[-limite:]
+
+
+def contar_chamadas_api():
+    """Estimativa de chamadas à API (baseado no cache)"""
+    # Isso é mais informativo, já que gviz não conta como API call
+    return {
+        'sheets_api': '0 (usando gviz)',
+        'drive_api': 'Variável (uploads)',
+        'cache_hits': 'Ativo (ttl=120s)'
+    }
+
+
+def simular_acao_usuario(id_usuario, tipo_acao, secrets, error_log=None):
+    """Simula uma ação para teste (não grava na planilha)"""
+    try:
+        return {
+            'id_usuario': id_usuario,
+            'tipo_acao': tipo_acao,
+            'timestamp': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+            'status': 'SIMULAÇÃO (não gravado)',
+            'gps_teste': '-15.7801,-47.9292',
+            'endereco_teste': obter_endereco_simples('-15.7801,-47.9292', error_log)
+        }
+    except Exception as e:
+        if error_log is not None:
+            error_log.append({
+                'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                'erro': str(e),
+                'funcao': 'simular_acao_usuario',
+                'traceback': traceback.format_exc(),
+                'tipo': type(e).__name__
+            })
+        return {
+            'id_usuario': id_usuario,
+            'tipo_acao': tipo_acao,
+            'timestamp': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+            'status': 'SIMULAÇÃO FALHOU',
+            'erro': str(e)
+        }
