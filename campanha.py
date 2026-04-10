@@ -13,6 +13,9 @@ import folium
 from streamlit_folium import st_folium
 from datetime import datetime, timedelta, timezone
 import io
+import sys
+import traceback
+import json
 
 from utils import (
     get_agora_br,
@@ -20,6 +23,7 @@ from utils import (
     sanitize_whatsapp,
     obter_endereco_simples,
     _get_gspread_client,
+    _get_drive_credentials,
     carregar_dados,
     salvar_foto_drive,
     salvar_documento_drive,
@@ -31,9 +35,45 @@ from utils import (
     carregar_grupos_completos_cached,
     criar_novo_grupo,
     criar_novo_macro_grupo,
-    editar_grupo,
-    excluir_grupo
+    # 🆕 NOVAS FUNÇÕES DE SUPORTE
+    diagnosticar_conexoes,
+    obter_logs_erros,
+    contar_chamadas_api,
+    simular_acao_usuario
 )
+
+# =============================================================================
+# CAPTURA GLOBAL DE ERROS (PARA O PAINEL DE SUPORTE)
+# =============================================================================
+
+def inicializar_captura_erros():
+    """
+    Configura captura global de exceções não tratadas
+    """
+    error_log_session = st.session_state.get('error_log', [])
+    st.session_state['error_log'] = error_log_session
+
+    def excecao_global(exc_type, exc_value, exc_traceback):
+        """Handler para exceções não tratadas"""
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+            return
+
+        erro_info = {
+            'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+            'erro': str(exc_value),
+            'funcao': 'GLOBAL_UNCAUGHT',
+            'traceback': ''.join(traceback.format_exception(exc_type, exc_value, exc_traceback)),
+            'tipo': exc_type.__name__
+        }
+
+        error_log_session.append(erro_info)
+        st.session_state['error_log'] = error_log_session
+
+        # Print no console
+        print(f"🚨 ERRO GLOBAL CAPTURADO: {erro_info['tipo']} - {erro_info['erro']}")
+
+    sys.excepthook = excecao_global
 
 
 # =============================================================================
@@ -221,6 +261,8 @@ if "mensagem_exibida" not in st.session_state:
 if "error_log" not in st.session_state:
     st.session_state["error_log"] = []
 
+# Inicializa captura global de erros
+inicializar_captura_erros()
 
 # =============================================================================
 # MODAIS DE PRESENÇA (DIALOG)
@@ -242,7 +284,7 @@ def modal_checkin(u, agora):
             gps_in = st.session_state.get('last_coords', "Sem GPS")
             with st.status("🚀 PROCESSANDO REGISTRO...", expanded=True) as status:
                 nome_img = f"checkin_{u['Nome']}_{agora_real.strftime('%d-%m-%Y_%H-%M')}.jpg"
-                link = salvar_foto_drive(foto_in, nome_img, st.secrets)
+                link = salvar_foto_drive(foto_in, nome_img, st.secrets, st.session_state.get('error_log'))
 
                 if link:
                     registrar_acao(
@@ -256,8 +298,14 @@ def modal_checkin(u, agora):
                     try:
                         horario_formatado = agora_real.strftime("%Y-%m-%d %H:%M:%S")
                         cookie_manager.set("comando2026_checkin_time", horario_formatado)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        st.session_state['error_log'].append({
+                            'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                            'erro': str(e),
+                            'funcao': 'modal_checkin.cookie_set',
+                            'traceback': traceback.format_exc(),
+                            'tipo': type(e).__name__
+                        })
 
                     status.update(label="✅ ENTRADA REGISTRADA!", state="complete")
                     time.sleep(2)
@@ -292,7 +340,7 @@ def modal_checkout(u, agora):
 
             with st.spinner("📡 ENVIANDO DADOS..."):
                 nome_img = f"checkout_{u['Nome']}_{agora_real.strftime('%d-%m-%Y_%H-%M')}.jpg"
-                link_drive = salvar_foto_drive(foto_out, nome_img, st.secrets)
+                link_drive = salvar_foto_drive(foto_out, nome_img, st.secrets, st.session_state.get('error_log'))
 
                 if link_drive:
                     acao_texto = f"Check-out | Foto: {link_drive}"
@@ -310,8 +358,14 @@ def modal_checkout(u, agora):
                     try:
                         if "comando2026_checkin_time" in cookie_manager.get_all():
                             cookie_manager.delete("comando2026_checkin_time")
-                    except:
-                        pass
+                    except Exception as e:
+                        st.session_state['error_log'].append({
+                            'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                            'erro': str(e),
+                            'funcao': 'modal_checkout.cookie_delete',
+                            'traceback': traceback.format_exc(),
+                            'tipo': type(e).__name__
+                        })
 
                     st.success("✅ TUDO SALVO! BOM DESCANSO.")
                     time.sleep(2)
@@ -328,7 +382,7 @@ if todos_os_cookies and not st.session_state["logout_em_andamento"]:
     user_id_cookie = todos_os_cookies.get("comando2026_user_id")
 
     if user_id_cookie and st.session_state["usuario_logado"] is None:
-        df_usuarios = carregar_dados("Usuarios", st.secrets["planilha"]["id"])
+        df_usuarios = carregar_dados("Usuarios", st.secrets["planilha"]["id"], st.session_state.get('error_log'))
         if df_usuarios is not None:
             user_match = df_usuarios[df_usuarios['ID_Usuario'].str.lower() == user_id_cookie.lower().strip()]
             if not user_match.empty:
@@ -367,7 +421,7 @@ if st.session_state["usuario_logado"] is None:
 
             if st.button("ENTRAR NO PAINEL", width='stretch', type="primary"):
                 with st.spinner("VALIDANDO..."):
-                    df_usuarios = carregar_dados("Usuarios", st.secrets["planilha"]["id"])
+                    df_usuarios = carregar_dados("Usuarios", st.secrets["planilha"]["id"], st.session_state.get('error_log'))
                     if df_usuarios is not None:
                         user_match = df_usuarios[df_usuarios['ID_Usuario'].str.lower() == email_input.lower().strip()]
                         if not user_match.empty:
@@ -415,8 +469,16 @@ with st.sidebar:
         try:
             cookie_manager.delete("comando2026_user_id", key="del_user")
             cookie_manager.delete("comando2026_checkin_time", key="del_check")
-        except:
+        except KeyError:
             pass
+        except Exception as e:
+            st.session_state['error_log'].append({
+                'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                'erro': str(e),
+                'funcao': 'sidebar.logout',
+                'traceback': traceback.format_exc(),
+                'tipo': type(e).__name__
+            })
 
         st.success("Saindo e limpando dados...")
         st.session_state.clear()
@@ -474,9 +536,9 @@ st.markdown(f"""
 
 if cargo_limpo == "colaborador":
 
-    df_msgs = carregar_dados("Mensagens", st.secrets["planilha"]["id"])
-    df_usuarios = carregar_dados("Usuarios", st.secrets["planilha"]["id"])
-    df_logs = carregar_dados("Logs", st.secrets["planilha"]["id"])
+    df_msgs = carregar_dados("Mensagens", st.secrets["planilha"]["id"], st.session_state.get('error_log'))
+    df_usuarios = carregar_dados("Usuarios", st.secrets["planilha"]["id"], st.session_state.get('error_log'))
+    df_logs = carregar_dados("Logs", st.secrets["planilha"]["id"], st.session_state.get('error_log'))
     m = None
 
     hoje_str = agora.strftime("%d/%m/%Y")
@@ -542,9 +604,16 @@ if cargo_limpo == "colaborador":
                 lon = location_data['coords']['longitude']
                 st.session_state['last_coords'] = f"{lat},{lon}"
                 st.markdown("🟢 **GPS ATIVO**")
-            except:
+            except Exception as e:
                 st.session_state['last_coords'] = "Erro GPS"
                 st.markdown("🔴 **ERRO GPS**")
+                st.session_state['error_log'].append({
+                    'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                    'erro': str(e),
+                    'funcao': 'colaborador.gps',
+                    'traceback': traceback.format_exc(),
+                    'tipo': type(e).__name__
+                })
         else:
             st.session_state['last_coords'] = "Aguardando..."
             st.markdown("🟡 **BUSCANDO SINAL...**")
@@ -649,7 +718,7 @@ if cargo_limpo == "colaborador":
         st.divider()
 
         st.subheader("📄 Meus Documentos")
-        df_contratos = carregar_dados("Contratos", st.secrets["planilha"]["id"])
+        df_contratos = carregar_dados("Contratos", st.secrets["planilha"]["id"], st.session_state.get('error_log'))
         if df_contratos is not None:
             meus_docs = df_contratos[df_contratos['ID_Usuario'].astype(str) == str(u['ID_Usuario'])]
             if not meus_docs.empty:
@@ -663,9 +732,9 @@ if cargo_limpo == "colaborador":
                             if arq:
                                 with st.spinner("Enviando..."):
                                     link = salvar_documento_drive(arq, f"ASSINADO_{u['Nome']}_{doc['Nome_Arquivo']}",
-                                                                  st.secrets)
+                                                                  st.secrets, st.session_state.get('error_log'))
                                     if link and atualizar_contrato_enviado(u['ID_Usuario'], doc['Nome_Arquivo'], link,
-                                                                           st.secrets):
+                                                                           st.secrets, st.session_state.get('error_log')):
                                         st.success("Enviado com sucesso!")
                                         time.sleep(1)
                                         st.rerun()
@@ -705,9 +774,9 @@ if cargo_limpo == "colaborador":
 
 elif cargo_limpo == "supervisor":
 
-    df_msgs = carregar_dados("Mensagens", st.secrets["planilha"]["id"])
-    df_usuarios = carregar_dados("Usuarios", st.secrets["planilha"]["id"])
-    df_logs = carregar_dados("Logs", st.secrets["planilha"]["id"])
+    df_msgs = carregar_dados("Mensagens", st.secrets["planilha"]["id"], st.session_state.get('error_log'))
+    df_usuarios = carregar_dados("Usuarios", st.secrets["planilha"]["id"], st.session_state.get('error_log'))
+    df_logs = carregar_dados("Logs", st.secrets["planilha"]["id"], st.session_state.get('error_log'))
     m = None
 
     if df_msgs is not None and not df_msgs.empty:
@@ -738,8 +807,15 @@ elif cargo_limpo == "supervisor":
                 lat, lon = location_data['coords']['latitude'], location_data['coords']['longitude']
                 st.session_state['last_coords'] = f"{lat},{lon}"
                 st.markdown("🟢 **GPS ATIVO**")
-            except:
+            except Exception as e:
                 st.markdown("🔴 **ERRO GPS**")
+                st.session_state['error_log'].append({
+                    'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                    'erro': str(e),
+                    'funcao': 'supervisor.gps',
+                    'traceback': traceback.format_exc(),
+                    'tipo': type(e).__name__
+                })
         else:
             st.markdown("🟡 **BUSCANDO SINAL...**")
     with col_btn:
@@ -819,7 +895,7 @@ elif cargo_limpo == "supervisor":
         st.divider()
 
         st.subheader("📄 Meus Documentos")
-        df_contratos = carregar_dados("Contratos", st.secrets["planilha"]["id"])
+        df_contratos = carregar_dados("Contratos", st.secrets["planilha"]["id"], st.session_state.get('error_log'))
         if df_contratos is not None:
             meus_docs = df_contratos[df_contratos['ID_Usuario'].astype(str) == str(u['ID_Usuario'])]
             if not meus_docs.empty:
@@ -833,9 +909,9 @@ elif cargo_limpo == "supervisor":
                             if arq:
                                 with st.spinner("Enviando..."):
                                     link = salvar_documento_drive(arq, f"ASSINADO_{u['Nome']}_{doc['Nome_Arquivo']}",
-                                                                  st.secrets)
+                                                                  st.secrets, st.session_state.get('error_log'))
                                     if link and atualizar_contrato_enviado(u['ID_Usuario'], doc['Nome_Arquivo'], link,
-                                                                           st.secrets):
+                                                                           st.secrets, st.session_state.get('error_log')):
                                         st.success("Enviado com sucesso!")
                                         time.sleep(1)
                                         st.rerun()
@@ -965,8 +1041,8 @@ elif cargo_limpo == "admin":
     agora_br = get_agora_br()
     hoje_str = agora_br.strftime("%d/%m/%Y")
 
-    df_usuarios = carregar_dados("Usuarios", st.secrets["planilha"]["id"])
-    df_logs = carregar_dados("Logs", st.secrets["planilha"]["id"])
+    df_usuarios = carregar_dados("Usuarios", st.secrets["planilha"]["id"], st.session_state.get('error_log'))
+    df_logs = carregar_dados("Logs", st.secrets["planilha"]["id"], st.session_state.get('error_log'))
 
     if not df_logs.empty:
         ultimos_logs_raw = df_logs.tail(10)
@@ -1029,9 +1105,6 @@ elif cargo_limpo == "admin":
             "<h2 style='font-family: \"Archivo Black\", sans-serif; color: #1D1D1B; margin-bottom: 25px; font-size: 2rem;'>ESTRUTURA DE EQUIPES</h2>",
             unsafe_allow_html=True)
 
-        # Importa função com cache
-        from utils import carregar_macro_grupos_cached
-
         planilha_id = st.secrets["planilha"]["id"]
 
         # Carrega Macro_Grupos com cache (1 chamada só)
@@ -1048,8 +1121,8 @@ elif cargo_limpo == "admin":
             key="select_macro_hierarquia"
         )
 
-        df_usuarios_raw = carregar_dados("Usuarios", planilha_id)
-        df_grupos_info = carregar_dados("Grupos", planilha_id)
+        df_usuarios_raw = carregar_dados("Usuarios", planilha_id, st.session_state.get('error_log'))
+        df_grupos_info = carregar_dados("Grupos", planilha_id, st.session_state.get('error_log'))
 
         if df_usuarios_raw is not None and df_grupos_info is not None:
             df_gerencial = pd.merge(df_usuarios_raw, df_grupos_info, on='ID_Grupo', how='left')
@@ -1150,7 +1223,7 @@ elif cargo_limpo == "admin":
         """, unsafe_allow_html=True)
 
         try:
-            client = _get_gspread_client(st.secrets)
+            client = _get_gspread_client(st.secrets, st.session_state.get('error_log'))
             aba_msg = client.open_by_key(st.secrets["planilha"]["id"]).worksheet("Mensagens")
             dados_msg = aba_msg.get_all_records()
             df_msg = pd.DataFrame(dados_msg)
@@ -1181,8 +1254,14 @@ elif cargo_limpo == "admin":
                                 cell = aba_msg.find(str(alvo_selecionado))
                                 if cell:
                                     aba_msg.delete_rows(cell.row)
-                            except:
-                                pass
+                            except Exception as e:
+                                st.session_state['error_log'].append({
+                                    'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                                    'erro': str(e),
+                                    'funcao': 'tab_mensagens.delete',
+                                    'traceback': traceback.format_exc(),
+                                    'tipo': type(e).__name__
+                                })
 
                         aba_msg.append_row(nova_linha)
                         st.success("✅ ATUALIZADO!")
@@ -1191,6 +1270,13 @@ elif cargo_limpo == "admin":
                     else:
                         st.error("O ID DO GRUPO É OBRIGATÓRIO")
         except Exception as e:
+            st.session_state['error_log'].append({
+                'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                'erro': str(e),
+                'funcao': 'tab_mensagens',
+                'traceback': traceback.format_exc(),
+                'tipo': type(e).__name__
+            })
             st.error(f"Erro na conexão: {e}")
 
     with tab_logs:
@@ -1298,10 +1384,8 @@ elif cargo_limpo == "admin":
                     ['Nome', 'Supervisor_Nome', 'ID_Grupo', 'Tipo_Acao', 'Data_Hora', 'Feedback', 'Endereço',
                      'Localização']].copy()
 
-                # ✅ CORREÇÃO 1: Substituir todos os NaN por string vazia
                 df_excel = df_excel.fillna('')
 
-                # ✅ CORREÇÃO 2: Garantir que todas as colunas sejam string
                 for col in df_excel.columns:
                     df_excel[col] = df_excel[col].astype(str)
 
@@ -1310,13 +1394,10 @@ elif cargo_limpo == "admin":
                     df_excel.to_excel(writer, index=False, sheet_name='Relatorio_Completo')
                     worksheet = writer.sheets['Relatorio_Completo']
 
-                    # ✅ CORREÇÃO 3: Calcular largura de forma segura
                     for idx, col in enumerate(df_excel.columns):
-                        # Usa apply com lambda para evitar erro com float
                         max_data_len = df_excel[col].apply(lambda x: len(str(x)) if x else 0).max()
                         header_len = len(str(col))
                         max_len = max(max_data_len, header_len) + 2
-                        # Limita largura máxima para não ficar exagerado
                         max_len = min(max_len, 50)
                         worksheet.set_column(idx, idx, max_len)
 
@@ -1330,33 +1411,25 @@ elif cargo_limpo == "admin":
                     type="primary"
                 )
             except Exception as e:
+                st.session_state['error_log'].append({
+                    'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                    'erro': str(e),
+                    'funcao': 'tab_logs.excel_export',
+                    'traceback': traceback.format_exc(),
+                    'tipo': type(e).__name__
+                })
                 st.error(f"Erro ao gerar Excel: {e}")
 
     # ==========================================
     # ABA 4: GESTÃO DE ACESSOS E GRUPOS
     # ==========================================
     with tab_cadastro:
-        # Importa funções de gestão de grupos (versões com cache)
-        from utils import (
-            carregar_macro_grupos_cached,
-            carregar_grupos_completos_cached,
-            criar_novo_grupo,
-            criar_novo_macro_grupo,
-            editar_grupo,
-            excluir_grupo
-        )
-
-        # =====================================================================
-        # CARREGAR DADOS UMA VEZ SÓ (EVITA MÚLTIPLAS CHAMADAS À API)
-        # =====================================================================
         planilha_id = st.secrets["planilha"]["id"]
 
-        # Carrega dados com cache (1 chamada só, reutilizada em toda a aba)
-        df_usuarios = carregar_dados("Usuarios", planilha_id)
+        df_usuarios = carregar_dados("Usuarios", planilha_id, st.session_state.get('error_log'))
         grupos_existentes = carregar_grupos_completos_cached(planilha_id)
         macro_grupos_lista = carregar_macro_grupos_cached(planilha_id)
 
-        # Converte grupos para lista simples
         lista_grupos = sorted([g['ID_Grupo'] for g in grupos_existentes]) if grupos_existentes else []
 
         # =====================================================================
@@ -1375,7 +1448,6 @@ elif cargo_limpo == "admin":
         }
         lista_nomes_exibicao = sorted(mapeamento_sup.keys())
 
-        # ✅ GARANTE: Apenas grupos reais (exclui Macro_Grupos)
         lista_grupos = sorted([
             g['ID_Grupo'] for g in grupos_existentes
             if not str(g.get('ID_Grupo', '')).startswith('_MACRO_')
@@ -1409,7 +1481,7 @@ elif cargo_limpo == "admin":
                             st.error("⚠️ Cadastre pelo menos um grupo antes de criar usuários!")
                         else:
                             try:
-                                client = _get_gspread_client(st.secrets)
+                                client = _get_gspread_client(st.secrets, st.session_state.get('error_log'))
                                 aba_u = client.open_by_key(planilha_id).worksheet("Usuarios")
 
                                 if n_sup_selecionado_display == "NENHUM / PRÓPRIO SUPERVISOR":
@@ -1431,6 +1503,13 @@ elif cargo_limpo == "admin":
                                 time.sleep(1)
                                 st.rerun()
                             except Exception as e:
+                                st.session_state['error_log'].append({
+                                    'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                                    'erro': str(e),
+                                    'funcao': 'tab_cadastro.novo_usuario',
+                                    'traceback': traceback.format_exc(),
+                                    'tipo': type(e).__name__
+                                })
                                 st.error(f"Erro: {e}")
                     else:
                         st.error("⚠️ PREENCHA TODOS OS CAMPOS!")
@@ -1442,12 +1521,8 @@ elif cargo_limpo == "admin":
             "<h2 style='font-family: \"Archivo Black\", sans-serif; color: #1D1D1B; margin-bottom: 20px; font-size: 1.8rem;'>🚩 GESTÃO DE GRUPOS E MACRO_GRUPOS</h2>",
             unsafe_allow_html=True)
 
-        # Duas colunas: Criar Grupo | Criar Macro_Grupo
         col_criar_grupo, col_criar_macro = st.columns(2)
 
-        # =====================================================================
-        # COLUNA 1: CRIAR NOVO GRUPO
-        # =====================================================================
         with col_criar_grupo:
             with st.container(border=True):
                 st.markdown("**📍 CRIAR NOVO GRUPO**")
@@ -1464,12 +1539,11 @@ elif cargo_limpo == "admin":
                             if g_macro == "Nenhum Macro_Grupo cadastrado":
                                 st.error("⚠️ Crie pelo menos um Macro_Grupo primeiro!")
                             else:
-                                sucesso, msg = criar_novo_grupo(g_nome, g_macro, g_link, st.secrets)
+                                sucesso, msg = criar_novo_grupo(g_nome, g_macro, g_link, st.secrets, st.session_state.get('error_log'))
                                 if sucesso:
                                     st.success(f"✅ {msg}")
-                                    # Cria mensagem de boas-vindas automática
                                     try:
-                                        client = _get_gspread_client(st.secrets)
+                                        client = _get_gspread_client(st.secrets, st.session_state.get('error_log'))
                                         plan = client.open_by_key(planilha_id)
                                         data_atual_msg = (get_agora_br()).strftime("%d/%m/%Y")
                                         plan.worksheet("Mensagens").append_row([
@@ -1478,8 +1552,14 @@ elif cargo_limpo == "admin":
                                             "MISSÃO INICIAL DE RUA",
                                             data_atual_msg
                                         ])
-                                    except:
-                                        pass
+                                    except Exception as e:
+                                        st.session_state['error_log'].append({
+                                            'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                                            'erro': str(e),
+                                            'funcao': 'tab_cadastro.mensagem_boas_vindas',
+                                            'traceback': traceback.format_exc(),
+                                            'tipo': type(e).__name__
+                                        })
                                     st.cache_data.clear()
                                     time.sleep(1)
                                     st.rerun()
@@ -1488,9 +1568,6 @@ elif cargo_limpo == "admin":
                         else:
                             st.error("⚠️ Digite o nome do grupo!")
 
-        # =====================================================================
-        # COLUNA 2: CRIAR NOVO MACRO_GRUPO
-        # =====================================================================
         with col_criar_macro:
             with st.container(border=True):
                 st.markdown("**🗺️ CRIAR NOVO MACRO_GRUPO**")
@@ -1499,7 +1576,7 @@ elif cargo_limpo == "admin":
 
                     if st.form_submit_button("➕ REGISTRAR MACRO_GRUPO", width='stretch', type="primary"):
                         if m_nome:
-                            sucesso, msg = criar_novo_macro_grupo(m_nome, st.secrets)
+                            sucesso, msg = criar_novo_macro_grupo(m_nome, st.secrets, st.session_state.get('error_log'))
                             if sucesso:
                                 st.success(f"✅ {msg}")
                                 st.cache_data.clear()
@@ -1510,19 +1587,14 @@ elif cargo_limpo == "admin":
                         else:
                             st.error("⚠️ Digite o nome do Macro_Grupo!")
 
-        # =====================================================================
-        # LISTAGEM DE GRUPOS E MACRO_GRUPOS (APENAS VISUALIZAÇÃO)
-        # =====================================================================
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown(
             "<h3 style='font-family: \"Archivo Black\", sans-serif; color: #1D1D1B; margin-bottom: 15px; font-size: 1.3rem;'>📋 GRUPOS CADASTRADOS</h3>",
             unsafe_allow_html=True)
 
         if grupos_existentes:
-            # Cria tabela resumo
             df_resumo = pd.DataFrame(grupos_existentes)
 
-            # Agrupa por Macro_Grupo para exibição
             for macro in macro_grupos_lista:
                 grupos_do_macro = [g for g in grupos_existentes if g.get('Macro_Grupo', '') == macro]
 
@@ -1573,7 +1645,14 @@ elif cargo_limpo == "admin":
                 if pos and "," in str(pos):
                     lat, lon = str(pos).split(",")
                     return float(lat), float(lon)
-            except:
+            except Exception as e:
+                st.session_state['error_log'].append({
+                    'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                    'erro': str(e),
+                    'funcao': 'tab_mapa.extrair_lat_lon',
+                    'traceback': traceback.format_exc(),
+                    'tipo': type(e).__name__
+                })
                 return None, None
             return None, None
 
@@ -1640,10 +1719,10 @@ elif cargo_limpo == "admin":
 
                             with st.spinner("Subindo para o Drive..."):
                                 link_gerado = salvar_documento_drive(arq_pdf, f"ORIGINAL_{n_doc}_{u_destino}",
-                                                                     st.secrets)
+                                                                     st.secrets, st.session_state.get('error_log'))
 
                                 if link_gerado:
-                                    if registrar_novo_contrato_admin(u_destino, n_doc, link_gerado, st.secrets):
+                                    if registrar_novo_contrato_admin(u_destino, n_doc, link_gerado, st.secrets, st.session_state.get('error_log')):
                                         st.success(f"✅ DOCUMENTO ENVIADO COM SUCESSO!")
                                         st.cache_data.clear()
                                         time.sleep(1)
@@ -1653,7 +1732,7 @@ elif cargo_limpo == "admin":
 
         with col_status:
             st.markdown("### 📋 MONITORAMENTO")
-            df_cont = carregar_dados("Contratos", st.secrets["planilha"]["id"])
+            df_cont = carregar_dados("Contratos", st.secrets["planilha"]["id"], st.session_state.get('error_log'))
 
             if df_cont is not None and not df_cont.empty:
                 df_view = pd.merge(df_cont, df_usuarios[['ID_Usuario', 'Nome']], on='ID_Usuario', how='left')
@@ -1690,3 +1769,369 @@ elif cargo_limpo == "admin":
                             else:
                                 sub_c2.button("⏳ PEND", disabled=True, width='stretch')
                         st.divider()
+
+# =============================================================================
+# VISÃO: SUPORTE TÉCNICO (DEBUG E MONITORAMENTO)
+# =============================================================================
+
+elif cargo_limpo == "suporte":
+
+    st.markdown("""
+        <style>
+            .block-container {
+                max-width: 1400px !important; 
+                padding-top: 2rem !important;
+            }
+            .stCode {
+                background-color: #1D1D1B !important;
+                color: #00FF00 !important;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+        <div style='background-color: #E20613; padding: 20px; border: 4px solid #1D1D1B; 
+                    box-shadow: 8px 8px 0px #1D1D1B; text-align: center; margin-bottom: 25px;'>
+            <h1 style='margin:0; font-family: "Archivo Black", sans-serif; font-style: italic; 
+                       color: #FFFFFF; font-size: 2.5rem;'>🛠️ PAINEL DE SUPORTE TÉCNICO</h1>
+            <p style='margin:10px 0 0 0; color: #FFEB00; font-weight: bold;'>
+                DEBUG • MONITORAMENTO • DIAGNÓSTICO
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    df_usuarios = carregar_dados("Usuarios", st.secrets["planilha"]["id"], st.session_state.get('error_log'))
+    df_logs = carregar_dados("Logs", st.secrets["planilha"]["id"], st.session_state.get('error_log'))
+
+    tab_diagnostico, tab_logs_erro, tab_acoes, tab_simulador, tab_sistema = st.tabs([
+        "🔍 DIAGNÓSTICO", "📛 LOGS DE ERRO", "👁️ TODAS AS AÇÕES", "🧪 SIMULADOR", "⚙️ SISTEMA"
+    ])
+
+    with tab_diagnostico:
+        st.markdown("### 🔍 TESTE DE CONEXÕES")
+
+        if st.button("🔄 EXECUTAR DIAGNÓSTICO COMPLETO", type="primary", width='stretch'):
+            with st.spinner("Testando todas as conexões..."):
+                diagnostico = diagnosticar_conexoes(st.secrets, st.session_state.get('error_log'))
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                c1, c2, c3, c4 = st.columns(4)
+
+                with c1:
+                    st.markdown(f"""
+                        <div style='background-color: {"#00FF00" if diagnostico["sheets"]["status"] == "✅" else "#FF0000"}; 
+                                    border: 3px solid #1D1D1B; padding: 15px; text-align: center; 
+                                    box-shadow: 4px 4px 0px #1D1D1B;'>
+                            <h3 style='margin:0; color: #1D1D1B;'>GOOGLE SHEETS</h3>
+                            <p style='font-size: 2rem; margin:10px 0;'>{diagnostico["sheets"]["status"]}</p>
+                            <p style='font-size: 0.8rem; margin:0; color: #1D1D1B;'>{diagnostico["sheets"]["msg"]}</p>
+                        </div>
+                    """, unsafe_allow_html=True)
+
+                with c2:
+                    st.markdown(f"""
+                        <div style='background-color: {"#00FF00" if diagnostico["drive"]["status"] == "✅" else "#FF0000"}; 
+                                    border: 3px solid #1D1D1B; padding: 15px; text-align: center; 
+                                    box-shadow: 4px 4px 0px #1D1D1B;'>
+                            <h3 style='margin:0; color: #1D1D1B;'>GOOGLE DRIVE</h3>
+                            <p style='font-size: 2rem; margin:10px 0;'>{diagnostico["drive"]["status"]}</p>
+                            <p style='font-size: 0.8rem; margin:0; color: #1D1D1B;'>{diagnostico["drive"]["msg"]}</p>
+                        </div>
+                    """, unsafe_allow_html=True)
+
+                with c3:
+                    st.markdown(f"""
+                        <div style='background-color: {"#00FF00" if diagnostico["planilha"]["status"] == "✅" else "#FF0000"}; 
+                                    border: 3px solid #1D1D1B; padding: 15px; text-align: center; 
+                                    box-shadow: 4px 4px 0px #1D1D1B;'>
+                            <h3 style='margin:0; color: #1D1D1B;'>PLANILHA</h3>
+                            <p style='font-size: 2rem; margin:10px 0;'>{diagnostico["planilha"]["status"]}</p>
+                            <p style='font-size: 0.8rem; margin:0; color: #1D1D1B;'>{diagnostico["planilha"]["msg"]}</p>
+                        </div>
+                    """, unsafe_allow_html=True)
+
+                with c4:
+                    st.markdown(f"""
+                        <div style='background-color: {"#00FF00" if diagnostico["cache"]["status"] == "✅" else "#FF0000"}; 
+                                    border: 3px solid #1D1D1B; padding: 15px; text-align: center; 
+                                    box-shadow: 4px 4px 0px #1D1D1B;'>
+                            <h3 style='margin:0; color: #1D1D1B;'>CACHE</h3>
+                            <p style='font-size: 2rem; margin:10px 0;'>{diagnostico["cache"]["status"]}</p>
+                            <p style='font-size: 0.8rem; margin:0; color: #1D1D1B;'>{diagnostico["cache"]["msg"]}</p>
+                        </div>
+                    """, unsafe_allow_html=True)
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                with st.expander("📋 DETALHES TÉCNICOS", expanded=True):
+                    st.json(diagnostico)
+
+    with tab_logs_erro:
+        st.markdown("### 📛 LOGS DE ERRO (SESSÃO ATUAL)")
+
+        erros = obter_logs_erros(st.session_state.get('error_log', []), limite=100)
+
+        c_err1, c_err2, c_err3, c_err4 = st.columns(4)
+
+        total_erros = len(erros)
+        erros_criticos = len([e for e in erros if 'CRITICAL' in e.get('tipo', '').upper() or 'KeyError' in e.get('tipo', '')])
+        erros_funcoes = len(set([e.get('funcao', '') for e in erros]))
+        ultimo_erro = erros[-1].get('data', 'N/A') if erros else 'Nenhum'
+
+        c_err1.metric("📛 Total Erros", total_erros)
+        c_err2.metric("⚠️ Críticos", erros_criticos, delta_color="inverse")
+        c_err3.metric("🔧 Funções Afetadas", erros_funcoes)
+        c_err4.metric("🕒 Último Erro", ultimo_erro.split(' ')[-1] if ultimo_erro != 'Nenhum' else 'N/A')
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        if not erros:
+            st.success("✅ NENHUM ERRO REGISTRADO NESTA SESSÃO")
+        else:
+            st.warning(f"⚠️ {len(erros)} ERRO(S) ENCONTRADO(S)")
+
+            tipos_erro = list(set([e.get('tipo', 'Desconhecido') for e in erros]))
+            filtro_tipo = st.selectbox("🔍 FILTRAR POR TIPO:", ["Todos"] + tipos_erro)
+
+            erros_filtrados = erros
+            if filtro_tipo != "Todos":
+                erros_filtrados = [e for e in erros if e.get('tipo', '') == filtro_tipo]
+
+            for i, erro in enumerate(erros_filtrados[::-1]):
+                cor_borda = "#FF0000" if "KeyError" in erro.get('tipo', '') or "Critical" in erro.get('tipo', '') else "#E20613"
+
+                with st.expander(f"❌ ERRO #{len(erros_filtrados)-i} | {erro.get('tipo', 'N/A')} | {erro.get('data', 'N/A')}"):
+                    col_info1, col_info2 = st.columns([1, 3])
+
+                    with col_info1:
+                        st.markdown("**📋 INFO:**")
+                        st.caption(f"""
+                        - **Função:** `{erro.get('funcao', 'N/A')}`
+                        - **Tipo:** `{erro.get('tipo', 'N/A')}`
+                        - **Data:** {erro.get('data', 'N/A')}
+                        """)
+
+                    with col_info2:
+                        st.markdown("**🔍 MENSAGEM:**")
+                        st.error(erro.get('erro', 'Sem mensagem'))
+
+                    if erro.get('traceback', ''):
+                        st.markdown("**📜 TRACEBACK COMPLETO:**")
+                        st.code(erro.get('traceback', ''), language="python")
+
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    col_copy, col_clear = st.columns([1, 1])
+                    with col_copy:
+                        st.code(f"{erro.get('tipo', '')}: {erro.get('erro', '')}", language="python")
+                    with col_clear:
+                        if st.button("🗑️ Remover este erro", key=f"del_err_{i}"):
+                            st.session_state['error_log'].remove(erro)
+                            st.rerun()
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            col_acoes = st.columns(3)
+            with col_acoes[0]:
+                if st.button("🗑️ LIMPAR TODOS OS ERROS", width='stretch', type="primary"):
+                    st.session_state['error_log'] = []
+                    st.rerun()
+            with col_acoes[1]:
+                if st.button("📥 BAIXAR LOG (JSON)", width='stretch'):
+                    json_str = json.dumps(erros, indent=2, ensure_ascii=False)
+                    st.download_button(
+                        label="📥 Download JSON",
+                        data=json_str,
+                        file_name=f"erros_{get_agora_br().strftime('%Y%m%d_%H%M%S')}.json",
+                        mime='application/json',
+                        width='stretch'
+                    )
+            with col_acoes[2]:
+                if st.button("📋 COPIAR ÚLTIMO ERRO", width='stretch'):
+                    if erros:
+                        st.code(erros[-1].get('traceback', ''), language="python")
+
+    # ==========================================
+    # TAB 3: TODAS AS AÇÕES (MONITORAMENTO EM TEMPO REAL)
+    # ==========================================
+    with tab_acoes:
+        st.markdown("### 👁️ MONITORAMENTO DE AÇÕES EM TEMPO REAL")
+
+        # Filtros
+        c_f1, c_f2, c_f3 = st.columns(3)
+
+        with c_f1:
+            datas_disponiveis = sorted(
+                [d for d in df_logs['Data_Hora'].str.split().str[0].unique().tolist() if "/" in str(d)],
+                reverse=True
+            ) if not df_logs.empty else []
+            data_filtro = st.selectbox("📅 DATA:", ["Todas"] + datas_disponiveis[:30])
+
+        with c_f2:
+            tipos_acao = df_logs['Tipo_Acao'].unique().tolist() if not df_logs.empty else []
+            tipo_filtro = st.selectbox("🎯 TIPO DE AÇÃO:", ["Todos"] + tipos_acao[:20])
+
+        with c_f3:
+            cargos = df_usuarios['Cargo'].unique().tolist() if df_usuarios is not None else []
+            cargo_filtro = st.selectbox("👤 CARGO:", ["Todos"] + cargos)
+
+        # Aplica filtros
+        df_filtrado = df_logs.copy() if not df_logs.empty else pd.DataFrame()
+
+        if not df_filtrado.empty:
+            if data_filtro != "Todas":
+                df_filtrado = df_filtrado[df_filtrado['Data_Hora'].str.contains(data_filtro)]
+            if tipo_filtro != "Todos":
+                df_filtrado = df_filtrado[df_filtrado['Tipo_Acao'].str.contains(tipo_filtro)]
+
+            # Merge com usuários
+            df_filtrado = pd.merge(df_filtrado, df_usuarios[['ID_Usuario', 'Nome', 'Cargo', 'ID_Grupo']],
+                                   on='ID_Usuario', how='left')
+
+            if cargo_filtro != "Todos":
+                df_filtrado = df_filtrado[df_filtrado['Cargo'] == cargo_filtro]
+
+            # Métricas
+            c_m1, c_m2, c_m3, c_m4 = st.columns(4)
+            c_m1.metric("Total de Ações", len(df_filtrado))
+            c_m2.metric("Usuários Únicos", df_filtrado['ID_Usuario'].nunique())
+            c_m3.metric("Check-ins", len(df_filtrado[df_filtrado['Tipo_Acao'].str.contains("Check-in")]))
+            c_m4.metric("Check-outs", len(df_filtrado[df_filtrado['Tipo_Acao'].str.contains("Check-out")]))
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # Tabela detalhada
+            st.dataframe(
+                df_filtrado.sort_values('Data_Hora', ascending=False)[
+                    ['Data_Hora', 'Nome', 'Cargo', 'Tipo_Acao', 'Localização', 'Endereço', 'Feedback']
+                ],
+                use_container_width=True,
+                hide_index=True
+            )
+
+            # Exportar
+            if st.download_button(
+                label="📥 BAIXAR LOGS COMPLETOS (CSV)",
+                data=df_filtrado.to_csv(index=False).encode('utf-8-sig'),
+                file_name=f"logs_comando_{get_agora_br().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime='text/csv',
+                width='stretch'
+            ):
+                st.success("Download iniciado!")
+        else:
+            st.warning("⚠️ NENHUM DADO DE LOG ENCONTRADO")
+
+    with tab_simulador:
+        st.markdown("### 🧪 SIMULADOR DE AÇÕES (TESTE)")
+
+        st.info("💡 Use esta ferramenta para testar funcionalidades sem afetar dados reais")
+
+        with st.container(border=True):
+            sim_id = st.text_input("ID DO USUÁRIO (para teste):", value=u['ID_Usuario'])
+            sim_acao = st.selectbox("TIPO DE AÇÃO:", [
+                "Check-in",
+                "Check-out",
+                "CONCLUIU: MISSÃO",
+                "AÇÃO: INTERAÇÃO INSTAGRAM",
+                "AÇÃO: MOBILIZAÇÃO WHATSAPP"
+            ])
+
+            if st.button("🧪 EXECUTAR SIMULAÇÃO", width='stretch', type="primary"):
+                resultado = simular_acao_usuario(sim_id, sim_acao, st.secrets, st.session_state.get('error_log'))
+
+                st.markdown("#### 📊 RESULTADO DA SIMULAÇÃO:")
+                st.json(resultado)
+
+                st.success("✅ Simulação executada (NÃO foi gravado na planilha)")
+
+    with tab_sistema:
+        st.markdown("### ⚙️ INFORMAÇÕES DO SISTEMA")
+
+        c1, c2 = st.columns(2)
+
+        with c1:
+            st.markdown("""
+                <div style='background-color: #F4F4F4; border: 3px solid #1D1D1B; 
+                            padding: 20px; box-shadow: 4px 4px 0px #1D1D1B;'>
+                    <h3 style='margin-top:0; color: #1D1D1B;'>📦 PACOTES INSTALADOS</h3>
+            """, unsafe_allow_html=True)
+
+            pacotes_principais = ['streamlit', 'pandas', 'gspread', 'google-auth', 'geopy', 'folium']
+            for pacote in pacotes_principais:
+                try:
+                    versao = __import__(pacote.replace('-', '_')).__version__
+                    st.markdown(f"`{pacote}`: **{versao}**")
+                except:
+                    st.markdown(f"`{pacote}`: *não encontrado*")
+
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        with c2:
+            st.markdown("""
+                <div style='background-color: #F4F4F4; border: 3px solid #1D1D1B; 
+                            padding: 20px; box-shadow: 4px 4px 0px #1D1D1B;'>
+                    <h3 style='margin-top:0; color: #1D1D1B;'>📊 ESTATÍSTICAS DE USO</h3>
+            """, unsafe_allow_html=True)
+
+            api_info = contar_chamadas_api()
+            for k, v in api_info.items():
+                st.markdown(f"**{k}:** {v}")
+
+            st.markdown(f"**Horário do Servidor:** {get_agora_br().strftime('%d/%m/%Y %H:%M:%S')}")
+            st.markdown(f"**Timezone:** Brasília (UTC-3)")
+
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("### 🗄️ STATUS DO CACHE")
+
+        if st.button("🔄 LIMPAR TODO O CACHE", width='stretch'):
+            st.cache_data.clear()
+            st.success("✅ Cache limpo! A página será recarregada.")
+            time.sleep(2)
+            st.rerun()
+
+        st.info("""
+        💡 **Dicas de Debug:**
+        - Se houver erro 429, limpe o cache e aguarde 2 minutos
+        - Verifique a aba "Logs de Erro" para detalhes
+        - Use o Simulador para testar sem afetar produção
+        - Em caso de problema no Drive, verifique as credenciais no secrets.toml
+        """)
+
+    with st.sidebar:
+        st.markdown("### 🛠️ FERRAMENTAS RÁPIDAS")
+
+        if st.button("🔄 ATUALIZAR TUDO", width='stretch'):
+            st.cache_data.clear()
+            st.rerun()
+
+        if st.button("📸 CAPTURAR SCREENSHOT (DEBUG)", width='stretch'):
+            st.info("Use a ferramenta de screenshot do seu navegador (F12 → Ctrl+Shift+P → screenshot)")
+
+        st.divider()
+
+        if st.button("🚪 SAIR DO SUPORTE", width='stretch'):
+            st.session_state["logout_em_andamento"] = True
+            st.session_state["usuario_logado"] = None
+
+            try:
+                cookie_manager.delete("comando2026_user_id", key="del_user_sup")
+                cookie_manager.delete("comando2026_checkin_time", key="del_check_sup")
+            except KeyError:
+                pass
+            except Exception as e:
+                st.session_state['error_log'].append({
+                    'data': get_agora_br().strftime("%d/%m/%Y %H:%M:%S"),
+                    'erro': str(e),
+                    'funcao': 'suporte.logout',
+                    'traceback': traceback.format_exc(),
+                    'tipo': type(e).__name__
+                })
+                st.warning(f"⚠️ Aviso: {str(e)}")
+
+            st.session_state.clear()
+            st.cache_data.clear()
+            st.success("Saindo...")
+            time.sleep(1)
+            st.rerun()
